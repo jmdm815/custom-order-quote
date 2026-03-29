@@ -610,7 +610,7 @@
       <div class="service-card" onclick="selectService('Print', this)">
         <div class="svc-icon">🖨️</div>
         <div class="svc-name">Print</div>
-        <div class="svc-desc">Full-color DTF transfers applied with heat. No minimums, photographic detail, works on any fabric.</div>
+        <div class="svc-desc">Vibrant, full-color prints with sharp detail and no minimum order. Works on virtually any garment or fabric type.</div>
       </div>
       <div class="service-card" onclick="selectService('UV Patch', this)">
         <div class="svc-icon">✨</div>
@@ -723,9 +723,51 @@ function _setStep(n) {
 // ─────────────────────────────────────────────
 //  STEP 1 — SEARCH
 // ─────────────────────────────────────────────
+// Curated popular styles by category (style numbers known to be carried by S&S)
+const POPULAR_STYLES = {
+  'T-Shirts':    ['PC61','G500','3001C','5000','3413C','64000','980','1717','4980','SS150'],
+  'Polos':       ['K500','TM96','K110','L500','8800','K420','K420LS','K167'],
+  'Sweatshirts': ['PC90H','18500','F170','P170','19484','PC78H','F260','18000'],
+  'Jackets':     ['J317','J768','J354','L317','J900','J790','J754','J332'],
+  'Hats':        ['CP80','NE1000','C112','C117','C101','45','R65','BC100'],
+  'Shorts':      ['C2','PT20M','5915','8151','PT17','8965'],
+  'Bags':        ['BG800','BG615','BG118','BG850','BG653','BG100'],
+};
+
+async function loadPopular(category, btnEl) {
+  document.querySelectorAll('.subcat-btn').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+
+  const styles = POPULAR_STYLES[category] || [];
+  if (!styles.length) return;
+
+  const el = document.getElementById('product-results');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Loading popular items…</div>';
+
+  try {
+    // Fetch all popular styles in parallel
+    const results = await Promise.all(
+      styles.map(s => fetch(`/api/search?q=${encodeURIComponent(s)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => {
+          const arr = Array.isArray(data) ? data : [];
+          // Find exact style name match
+          return arr.find(p => (p.styleName||'').toUpperCase() === s.toUpperCase()) || arr[0] || null;
+        })
+        .catch(() => null)
+      )
+    );
+    const found = results.filter(Boolean);
+    renderProductGrid(found);
+  } catch(e) {
+    el.innerHTML = `<div class="empty">Could not load popular items.</div>`;
+  }
+}
+
 // Subcategory definitions — search terms that match S&S catalog
 const SUBCATEGORIES = {
   'T-Shirts': [
+        { label: 'Popular',           popular: 'T-Shirts' },
     { label: 'All T-Shirts',         search: 'T-Shirts' },
     { label: '100% Cotton',          search: 'Cotton T-Shirt' },
     { label: 'Cotton/Poly Blend',    search: 'Cotton Poly T-Shirt' },
@@ -736,6 +778,7 @@ const SUBCATEGORIES = {
     { label: 'Ladies',               search: 'Ladies T-Shirt' },
   ],
   'Polos': [
+        { label: 'Popular',           popular: 'Polos' },
     { label: 'All Polos',            search: 'Polos' },
     { label: 'Performance',          search: 'Performance Polo' },
     { label: 'Cotton',               search: 'Cotton Polo' },
@@ -744,6 +787,7 @@ const SUBCATEGORIES = {
     { label: 'Youth',                search: 'Youth Polo' },
   ],
   'Sweatshirts': [
+        { label: 'Popular',           popular: 'Sweatshirts' },
     { label: 'All Fleece',           search: 'Sweatshirts' },
     { label: 'Crewneck',             search: 'Crewneck Sweatshirt' },
     { label: 'Hoodies',              search: 'Hooded Sweatshirt' },
@@ -753,6 +797,7 @@ const SUBCATEGORIES = {
     { label: 'Ladies',               search: 'Ladies Hoodie' },
   ],
   'Jackets': [
+        { label: 'Popular',           popular: 'Jackets' },
     { label: 'All Jackets',          search: 'Jackets' },
     { label: 'Soft Shell',           search: 'Soft Shell Jacket' },
     { label: 'Puffer / Quilted',     search: 'Puffer Jacket' },
@@ -762,6 +807,7 @@ const SUBCATEGORIES = {
     { label: 'Ladies',               search: 'Ladies Jacket' },
   ],
   'Hats': [
+        { label: 'Popular',           popular: 'Hats' },
     { label: 'All Headwear',         search: 'Hats' },
     { label: 'Structured',           search: 'Structured Cap' },
     { label: 'Unstructured',         search: 'Unstructured Cap' },
@@ -772,6 +818,7 @@ const SUBCATEGORIES = {
     { label: 'Bucket Hats',          search: 'Bucket Hat' },
   ],
   'Shorts': [
+        { label: 'Popular',           popular: 'Shorts' },
     { label: 'All Shorts',           search: 'Shorts' },
     { label: 'Athletic',             search: 'Athletic Shorts' },
     { label: 'Mesh',                 search: 'Mesh Shorts' },
@@ -780,6 +827,7 @@ const SUBCATEGORIES = {
     { label: 'Youth',                search: 'Youth Shorts' },
   ],
   'Bags': [
+        { label: 'Popular',           popular: 'Bags' },
     { label: 'All Bags',             search: 'Bags' },
     { label: 'Backpacks',            search: 'Backpack' },
     { label: 'Tote Bags',            search: 'Tote Bag' },
@@ -805,12 +853,20 @@ function selectMainCat(name, btnEl) {
   // Build subcategory pills
   const subs = SUBCATEGORIES[name] || [];
   if (subs.length) {
-    subBar.innerHTML = subs.map((s, i) =>
-      `<button class="subcat-btn${i === 0 ? ' active' : ''}" onclick="browseSubCat('${s.search}', this)">${s.label}</button>`
-    ).join('');
+    subBar.innerHTML = subs.map((s, i) => {
+      if (s.popular) {
+        return `<button class="subcat-btn${i === 0 ? ' active' : ''}" onclick="loadPopular('${s.popular}', this)">${s.label}</button>`;
+      }
+      return `<button class="subcat-btn${i === 0 ? ' active' : ''}" onclick="browseSubCat('${s.search}', this)">${s.label}</button>`;
+    }).join('');
     subBar.classList.add('visible');
-    // Auto-load first subcategory
-    browseSubCat(subs[0].search, subBar.querySelector('.subcat-btn'));
+    // Auto-load first subcategory (Popular)
+    const firstSub = subs[0];
+    if (firstSub.popular) {
+      loadPopular(firstSub.popular, subBar.querySelector('.subcat-btn'));
+    } else {
+      browseSubCat(firstSub.search, subBar.querySelector('.subcat-btn'));
+    }
   } else {
     subBar.innerHTML = '';
     subBar.classList.remove('visible');
