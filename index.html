@@ -1630,7 +1630,10 @@ function buildSummary() {
 
   Object.entries(byStyle).forEach(([styleNum, group]) => {
     html += `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink3);margin:14px 0 8px;padding-top:12px;border-top:1.5px solid var(--paper3);display:flex;align-items:center;justify-content:space-between">
-      <span><strong style="color:var(--ink2)">${styleNum}</strong> — ${group.name}</span>
+      <span>
+        <strong style="color:var(--ink2)">${styleNum}</strong> — 
+        <button onclick="reloadProductFromCart(${group.items[0].id})" style="font-size:11px;color:var(--ink2);background:none;border:none;cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;text-underline-offset:2px;text-transform:uppercase;letter-spacing:0.07em;font-weight:400">${group.name}</button>
+      </span>
       <button onclick="reloadProductFromCart(${group.items[0].id})" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;text-underline-offset:2px">+ Add more</button>
     </div>`;
     group.items.forEach(item => {
