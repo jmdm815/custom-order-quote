@@ -1,7 +1,4 @@
 // api/skus.js
-// Fetches products (SKUs with color, size, image data) for a given styleID
-// The /v2/products endpoint returns quantityAvailable directly — no separate inventory call needed
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -23,9 +20,9 @@ export default async function handler(req, res) {
   };
 
   try {
-    // /v2/products returns one row per SKU with colorName, sizeName, quantityAvailable, images, etc.
+    // Use ?styleID= query param (not path param) to get ALL skus for a style
     const response = await fetch(
-      `https://api.ssactivewear.com/v2/products/${encodeURIComponent(styleID)}`,
+      `https://api.ssactivewear.com/v2/products?styleID=${encodeURIComponent(styleID)}`,
       auth
     );
 
@@ -35,16 +32,23 @@ export default async function handler(req, res) {
     }
 
     const skus = await response.json();
-
-    // Prepend base URL to all image fields
     const base = 'https://www.ssactivewear.com/';
-    const merged = (Array.isArray(skus) ? skus : []).map(s => ({
-      ...s,
-      colorFrontImage:  s.colorFrontImage  ? base + s.colorFrontImage  : '',
-      colorSideImage:   s.colorSideImage   ? base + s.colorSideImage   : '',
-      colorBackImage:   s.colorBackImage   ? base + s.colorBackImage   : '',
-      colorSwatchImage: s.colorSwatchImage ? base + s.colorSwatchImage : '',
-    }));
+
+    const merged = (Array.isArray(skus) ? skus : []).map(s => {
+      // Inventory is nested in warehouses array — sum all warehouse qty values
+      const warehouseQty = Array.isArray(s.warehouses)
+        ? s.warehouses.reduce((sum, w) => sum + (w.qty || 0), 0)
+        : 0;
+
+      return {
+        ...s,
+        quantityAvailable: warehouseQty,
+        colorFrontImage:  s.colorFrontImage  ? base + s.colorFrontImage  : '',
+        colorSideImage:   s.colorSideImage   ? base + s.colorSideImage   : '',
+        colorBackImage:   s.colorBackImage   ? base + s.colorBackImage   : '',
+        colorSwatchImage: s.colorSwatchImage ? base + s.colorSwatchImage : '',
+      };
+    });
 
     return res.status(200).json(merged);
   } catch (err) {
