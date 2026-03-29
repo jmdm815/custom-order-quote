@@ -892,6 +892,36 @@ function _setStep(n) {
 }
 
 // ── CART FUNCTIONS ──
+async function reloadProductFromCart(id) {
+  const item = cart.find(i => i.id === id);
+  if (!item) return;
+  closeCart();
+
+  // Restore product state
+  state.product = item.product;
+
+  // Go to step 2 and load product detail
+  _setStep(2);
+
+  // Populate product info
+  document.getElementById('d-brand').textContent = item.product.brandName || item.product.BrandName || '';
+  document.getElementById('d-name').textContent  = item.product.title || item.product.styleName || 'Product';
+  document.getElementById('d-style').textContent = `Style# ${item.product.styleName || item.product.styleID}`;
+
+  // Load description
+  loadDescription(item.product.styleID || item.product.styleName);
+
+  // Fetch SKUs fresh from API
+  const styleId = item.product.styleID || item.product.StyleID || '';
+  try {
+    const res = await fetch(`/api/skus?styleID=${encodeURIComponent(styleId)}`);
+    const skus = await res.json();
+    buildColorGrid(Array.isArray(skus) ? skus : (skus.Skus || skus.skus || []));
+  } catch(e) {
+    buildColorGrid([]);
+  }
+}
+
 function openCart() {
   document.getElementById('cart-overlay').classList.add('open');
   document.getElementById('cart-drawer').classList.add('open');
@@ -1058,10 +1088,10 @@ function updateCartUI() {
       html += `<div class="cart-item" id="cart-item-${item.id}">
         <div class="cart-item-header">
           ${imgHtml}
-          <div class="cart-item-info">
+          <div class="cart-item-info" onclick="reloadProductFromCart(${item.id})" style="cursor:pointer;flex:1" title="Click to add more">
             <div class="cart-item-style">${styleNum} · ${item.color.name}</div>
-            <div class="cart-item-name">${item.product.title || item.product.styleName}</div>
-            <div class="cart-item-color">${total} piece${total !== 1 ? 's' : ''}</div>
+            <div class="cart-item-name" style="text-decoration:underline;text-decoration-color:#ccc;text-underline-offset:2px">${item.product.title || item.product.styleName}</div>
+            <div class="cart-item-color">${total} piece${total !== 1 ? 's' : ''} · <span style="color:var(--accent);font-size:11px">+ Add more</span></div>
           </div>
           <button class="cart-item-remove" onclick="removeFromCart(${item.id})" title="Remove">✕</button>
         </div>
@@ -1599,8 +1629,9 @@ function buildSummary() {
   let grandTotal = 0;
 
   Object.entries(byStyle).forEach(([styleNum, group]) => {
-    html += `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink3);margin:14px 0 8px;padding-top:12px;border-top:1.5px solid var(--paper3)">
-      <strong style="color:var(--ink2)">${styleNum}</strong> — ${group.name}
+    html += `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink3);margin:14px 0 8px;padding-top:12px;border-top:1.5px solid var(--paper3);display:flex;align-items:center;justify-content:space-between">
+      <span><strong style="color:var(--ink2)">${styleNum}</strong> — ${group.name}</span>
+      <button onclick="reloadProductFromCart(${group.items[0].id})" style="font-size:11px;color:var(--accent);background:none;border:none;cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;text-underline-offset:2px">+ Add more</button>
     </div>`;
     group.items.forEach(item => {
       const total = item.sizes.reduce((a,s) => a + (parseInt(s.qty)||0), 0);
