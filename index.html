@@ -766,7 +766,7 @@
 <!-- ══ CART FAB ══ -->
 <button class="cart-fab hidden" id="cart-fab" onclick="openCart()">
   <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-  Cart
+  Bag
   <span class="cart-count" id="cart-count">0</span>
 </button>
 
@@ -776,11 +776,11 @@
 <!-- ══ CART DRAWER ══ -->
 <div class="cart-drawer" id="cart-drawer">
   <div class="cart-header">
-    <h2>Your cart</h2>
+    <h2>Your bag</h2>
     <button class="cart-close" onclick="closeCart()">✕</button>
   </div>
   <div class="cart-body" id="cart-body">
-    <div class="cart-empty">Your cart is empty. Add items from the catalog.</div>
+    <div class="cart-empty">Your bag is empty. Add items from the catalog.</div>
   </div>
   <div class="cart-footer">
     <button class="btn btn-primary" style="width:100%" onclick="closeCart(); goStep(4); buildSummary();" id="cart-checkout-btn" disabled>Request quote →</button>
@@ -856,9 +856,9 @@ function addToCart() {
 
   const item = {
     id: Date.now(),
-    product: state.product,
-    color: state.color,
-    sizes: ordered,
+    product: JSON.parse(JSON.stringify(state.product)),
+    color: { name: state.color.name, hex: state.color.hex, swatch: state.color.swatch },
+    sizes: ordered.map(s => ({ size: s.size, sku: s.sku, qty: s.qty })), // deep copy
     service: null,
     image: state.color.skus[0]?.colorFrontImage || '',
   };
@@ -896,7 +896,7 @@ function updateCartUI() {
 
   const body = document.getElementById('cart-body');
   if (!cart.length) {
-    body.innerHTML = '<div class="cart-empty">Your cart is empty. Add items from the catalog.</div>';
+    body.innerHTML = '<div class="cart-empty">Your bag is empty. Add items from the catalog.</div>';
     updateCartCheckoutBtn();
     return;
   }
