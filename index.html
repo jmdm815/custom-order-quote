@@ -813,8 +813,23 @@ let state = {
   sizes: [],
   service: null,
 };
-// Cart: array of { id, product, color, sizes, service, image }
+// Cart: array of { id, product, color, sizes, service, placements, customPlacement, image }
 let cart = [];
+
+function saveCart() {
+  try { localStorage.setItem('jm_bag', JSON.stringify(cart)); } catch(e) {}
+}
+
+function loadCart() {
+  try {
+    const saved = localStorage.getItem('jm_bag');
+    if (saved) cart = JSON.parse(saved);
+  } catch(e) { cart = []; }
+}
+
+// Load cart on page start
+loadCart();
+updateCartUI();
 
 // ─────────────────────────────────────────────
 //  STEP NAV
@@ -860,9 +875,12 @@ function addToCart() {
     color: { name: state.color.name, hex: state.color.hex, swatch: state.color.swatch },
     sizes: ordered.map(s => ({ size: s.size, sku: s.sku, qty: s.qty })), // deep copy
     service: null,
+    placements: [],
+    customPlacement: '',
     image: state.color.skus[0]?.colorFrontImage || '',
   };
   cart.push(item);
+  saveCart();
   updateCartUI();
   openCart();
 
@@ -875,16 +893,85 @@ function addToCart() {
 
 function removeFromCart(id) {
   cart = cart.filter(item => item.id !== id);
+  saveCart();
   updateCartUI();
 }
 
 function setCartService(id, svc, pillEl) {
   const item = cart.find(i => i.id === id);
-  if (item) item.service = svc;
-  // Update pill UI for this item
+  if (!item) return;
+  item.service = svc;
+  item.placements = []; // reset placements when service changes
+  item.customPlacement = '';
+  saveCart();
   pillEl.closest('.svc-pills').querySelectorAll('.svc-pill').forEach(p => p.classList.remove('active'));
   pillEl.classList.add('active');
+  // Re-render placement section
+  const wrap = document.getElementById('placement-' + id);
+  if (wrap) wrap.innerHTML = buildPlacementHTML(item);
   updateCartCheckoutBtn();
+}
+
+function isHat(item) {
+  const cat = (item.product.baseCategory || '').toLowerCase();
+  const title = (item.product.title || item.product.styleName || '').toLowerCase();
+  return cat.includes('hat') || cat.includes('cap') || cat.includes('head') ||
+         title.includes('hat') || title.includes('cap') || title.includes('beanie') ||
+         title.includes('bucket') || title.includes('visor');
+}
+
+const PLACEMENTS = {
+  'Embroidery': ['Front left chest', 'Front right chest'],
+  'Print':      ['Front', 'Back', 'Left sleeve', 'Right sleeve'],
+  'UV Patch':   ['Front', 'Back', 'Left side (wearing)', 'Right side (wearing)'],
+};
+
+function buildPlacementHTML(item) {
+  if (!item.service) return '';
+  const opts = PLACEMENTS[item.service] || [];
+  const selected = item.placements || [];
+  const isEmb = item.service === 'Embroidery';
+
+  let pills = opts.map(opt => {
+    const active = selected.includes(opt) ? ' active' : '';
+    return `<button class="placement-pill${active}" onclick="togglePlacement(${item.id},'${opt.replace(/'/g,"\'")}',this)">${opt}</button>`;
+  }).join('');
+
+  if (isEmb) {
+    const customVal = item.customPlacement || '';
+    const customVisible = selected.includes('Custom') ? ' active' : '';
+    const inputVisible = selected.includes('Custom') ? ' visible' : '';
+    pills += `<button class="placement-pill${customVisible}" onclick="togglePlacement(${item.id},'Custom',this)">Custom (describe)</button>`;
+    pills += `<input class="placement-custom${inputVisible}" id="custom-input-${item.id}" type="text" placeholder="Describe placement…" value="${customVal}" oninput="setCustomPlacement(${item.id},this.value)">`;
+  }
+
+  return `<label>Placement <span style="font-weight:400;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
+    <div class="placement-pills">${pills}</div>`;
+}
+
+function togglePlacement(id, opt, pillEl) {
+  const item = cart.find(i => i.id === id);
+  if (!item) return;
+  if (!item.placements) item.placements = [];
+  if (item.placements.includes(opt)) {
+    item.placements = item.placements.filter(p => p !== opt);
+    pillEl.classList.remove('active');
+  } else {
+    item.placements.push(opt);
+    pillEl.classList.add('active');
+  }
+  saveCart();
+  // Show/hide custom input for embroidery
+  if (opt === 'Custom') {
+    const input = document.getElementById('custom-input-' + id);
+    if (input) input.classList.toggle('visible', item.placements.includes('Custom'));
+  }
+  updateCartCheckoutBtn();
+}
+
+function setCustomPlacement(id, val) {
+  const item = cart.find(i => i.id === id);
+  if (item) { item.customPlacement = val; saveCart(); }
 }
 
 function updateCartUI() {
@@ -936,9 +1023,10 @@ function updateCartUI() {
           <div class="svc-pills">
             <button class="svc-pill${item.service==='Embroidery'?' active':''}" onclick="setCartService(${item.id},'Embroidery',this)">🧵 Embroidery</button>
             <button class="svc-pill${item.service==='Print'?' active':''}" onclick="setCartService(${item.id},'Print',this)">🖨️ Print</button>
-            <button class="svc-pill${item.service==='UV Patch'?' active':''}" onclick="setCartService(${item.id},'UV Patch',this)">✨ UV Patch</button>
+            ${isHat(item) ? `<button class="svc-pill${item.service==='UV Patch'?' active':''}" onclick="setCartService(${item.id},'UV Patch',this)">✨ UV Patch</button>` : ''}
           </div>
         </div>
+        <div class="placement-wrap" id="placement-${item.id}">${buildPlacementHTML(item)}</div>
       </div>`;
     });
     html += '</div>';
@@ -1339,6 +1427,16 @@ function goStep(n) {
   _setStep(n);
 }
 
+function placementDisplay(item) {
+  if (!item.placements || !item.placements.length) return '—';
+  const parts = item.placements.map(p => {
+    if (p === 'Custom' && item.customPlacement) return `Custom: ${item.customPlacement}`;
+    if (p === 'Custom') return 'Custom';
+    return p;
+  });
+  return parts.join(', ');
+}
+
 function buildSummary() {
   if (!cart.length) {
     document.getElementById('order-summary').innerHTML = '<div style="color:var(--ink3);font-size:14px;padding:12px 0">Your bag is empty.</div>';
@@ -1367,6 +1465,7 @@ function buildSummary() {
         <div class="summary-row"><span class="label">Color</span><span class="val">${item.color.name}</span></div>
         <div class="summary-row"><span class="label">Sizes &amp; qty</span><span class="val" style="text-align:right;max-width:58%;font-size:13px;line-height:1.5">${sizeList}</span></div>
         <div class="summary-row"><span class="label">Service</span><span class="val">${item.service || '—'}</span></div>
+        <div class="summary-row"><span class="label">Placement</span><span class="val" style="text-align:right;max-width:55%;font-size:13px">${placementDisplay(item)}</span></div>
         <div class="summary-row" style="margin-bottom:8px"><span class="label">Pieces</span><span class="val">${total}</span></div>`;
     });
   });
@@ -1412,6 +1511,7 @@ async function submitQuote() {
       orderLines += `  Color: ${item.color.name}\n`;
       orderLines += `  Sizes: ${item.sizes.map(s=>`${s.size}×${s.qty}`).join(', ')}\n`;
       orderLines += `  Service: ${item.service}\n`;
+      orderLines += `  Placement: ${placementDisplay(item)}\n`;
       orderLines += `  Subtotal: ${total} pcs\n`;
     });
   });
@@ -1486,6 +1586,7 @@ function showSuccess() {
 function resetApp() {
   state = { currentStep: 1, product: null, color: null, sizes: [], service: null };
   cart = [];
+  saveCart();
   document.getElementById('search-input').value = '';
   document.getElementById('product-results').innerHTML = '<p class="empty">Search for a product or pick a category above.</p>';
   document.getElementById('cart-fab').classList.add('hidden');
