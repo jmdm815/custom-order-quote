@@ -1340,21 +1340,42 @@ function goStep(n) {
 }
 
 function buildSummary() {
-  const p = state.product;
-  const ordered = state.sizes.filter(s => s.qty > 0);
-  const total = ordered.reduce((a,s) => a+s.qty, 0);
+  if (!cart.length) {
+    document.getElementById('order-summary').innerHTML = '<div style="color:var(--ink3);font-size:14px;padding:12px 0">Your bag is empty.</div>';
+    return;
+  }
 
-  const sizeList = ordered.map(s => `${s.size}: ${s.qty}`).join(' · ');
+  const byStyle = {};
+  cart.forEach(item => {
+    const key = item.product.styleName || String(item.product.styleID) || 'Unknown';
+    if (!byStyle[key]) byStyle[key] = { name: item.product.title || item.product.styleName || 'Item', brand: item.product.brandName || '', items: [] };
+    byStyle[key].items.push(item);
+  });
 
-  document.getElementById('order-summary').innerHTML = `
-    <h3>Order summary</h3>
-    <div class="summary-row"><span class="label">Product</span><span class="val">${p.Title || p.StyleName || 'Item'}</span></div>
-    <div class="summary-row"><span class="label">Style #</span><span class="val">${p.StyleID || p.styleID || ''}</span></div>
-    <div class="summary-row"><span class="label">Color</span><span class="val">${state.color?.name || ''}</span></div>
-    <div class="summary-row"><span class="label">Sizes &amp; qty</span><span class="val" style="text-align:right;max-width:60%">${sizeList}</span></div>
-    <div class="summary-row"><span class="label">Total pieces</span><span class="val">${total}</span></div>
-    <div class="summary-row"><span class="label">Service</span><span class="val">${state.service}</span></div>
-  `;
+  let html = '';
+  let grandTotal = 0;
+
+  Object.entries(byStyle).forEach(([styleNum, group]) => {
+    html += `<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.07em;color:var(--ink3);margin:14px 0 8px;padding-top:12px;border-top:1.5px solid var(--paper3)">
+      <strong style="color:var(--ink2)">${styleNum}</strong> — ${group.name}
+    </div>`;
+    group.items.forEach(item => {
+      const total = item.sizes.reduce((a,s) => a + (parseInt(s.qty)||0), 0);
+      grandTotal += total;
+      const sizeList = item.sizes.map(s => `${s.size}: ${parseInt(s.qty)||0}`).join(' · ');
+      html += `
+        <div class="summary-row"><span class="label">Color</span><span class="val">${item.color.name}</span></div>
+        <div class="summary-row"><span class="label">Sizes &amp; qty</span><span class="val" style="text-align:right;max-width:58%;font-size:13px;line-height:1.5">${sizeList}</span></div>
+        <div class="summary-row"><span class="label">Service</span><span class="val">${item.service || '—'}</span></div>
+        <div class="summary-row" style="margin-bottom:8px"><span class="label">Pieces</span><span class="val">${total}</span></div>`;
+    });
+  });
+
+  html += `<div class="summary-row" style="font-weight:500;border-top:2px solid var(--paper3);margin-top:10px;padding-top:12px;font-size:15px">
+    <span class="label">Total pieces</span><span class="val">${grandTotal}</span>
+  </div>`;
+
+  document.getElementById('order-summary').innerHTML = html;
 }
 
 // ─────────────────────────────────────────────
@@ -1372,11 +1393,6 @@ async function submitQuote() {
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
   btn.textContent = 'Sending…';
-
-  const p = state.product;
-  const ordered = state.sizes.filter(s => s.qty > 0);
-  const total = ordered.reduce((a,s) => a+s.qty, 0);
-  const sizeBreakdown = ordered.map(s => `${s.size}: ${s.qty}`).join(', ');
 
   // Build cart summary for email
   const byStyle = {};
