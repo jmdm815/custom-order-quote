@@ -629,10 +629,13 @@ function renderProductGrid(products) {
   el.innerHTML = '<div class="product-grid" id="pg"></div>';
   const grid = document.getElementById('pg');
   products.forEach(p => {
-    const img = p.Image || p.image || (p.Thumbnails && p.Thumbnails[0]) || '';
-    const name = p.Title || p.title || p.StyleName || p.styleName || 'Product';
-    const brand = p.BrandName || p.brandName || p.Brand || '';
-    const style = p.StyleID || p.styleID || p.sku || '';
+    // S&S styles endpoint field names: styleID, title, brandName, styleName
+    const styleId = p.styleID || p.StyleID || '';
+    const name  = p.title || p.Title || p.styleName || 'Product';
+    const brand = p.brandName || p.BrandName || '';
+    const style = p.styleName || p.StyleID || styleId || '';
+    // Images only available after selecting a color (from SKUs endpoint)
+    const img = '';
 
     const card = document.createElement('div');
     card.className = 'product-card';
@@ -645,7 +648,7 @@ function renderProductGrid(products) {
         <div class="card-name">${name}</div>
         <div class="card-brand">${brand}</div>
       </div>`;
-    card.onclick = () => selectProduct(p, card);
+    card.onclick = () => selectProduct({...p, styleID: styleId}, card);
     grid.appendChild(card);
   });
 }
@@ -662,12 +665,12 @@ async function selectProduct(p, cardEl) {
 //  STEP 2 — COLOR & QTY
 // ─────────────────────────────────────────────
 async function loadProductDetail(p) {
-  const styleId = p.StyleID || p.styleID || p.sku;
+  const styleId = p.styleID || p.StyleID || p.styleName || p.sku;
 
   // Populate basic info
-  document.getElementById('d-brand').textContent = p.BrandName || p.brandName || p.Brand || '';
-  document.getElementById('d-name').textContent  = p.Title || p.title || p.StyleName || 'Product';
-  document.getElementById('d-style').textContent = `Style# ${styleId}`;
+  document.getElementById('d-brand').textContent = p.brandName || p.BrandName || '';
+  document.getElementById('d-name').textContent  = p.title || p.Title || p.styleName || 'Product';
+  document.getElementById('d-style').textContent = `Style# ${p.styleName || styleId}`;
 
   // Fetch SKUs (colors + sizes + inventory)
   try {
@@ -684,9 +687,10 @@ function buildColorGrid(skus) {
   // Group by color
   const byColor = {};
   skus.forEach(s => {
-    const cname = s.ColorName || s.colorName || s.Color || 'Default';
-    const chex  = s.ColorCode || s.colorCode || s.hex || '#cccccc';
-    if (!byColor[cname]) byColor[cname] = { name: cname, hex: chex, skus: [] };
+    const cname = s.colorName || s.ColorName || 'Default';
+    const chex  = s.color1 || s.colorCode || '#cccccc';
+    const swatch = s.colorSwatchImage || '';
+    if (!byColor[cname]) byColor[cname] = { name: cname, hex: chex, swatch, skus: [] };
     byColor[cname].skus.push(s);
   });
 
@@ -695,7 +699,12 @@ function buildColorGrid(skus) {
   Object.values(byColor).forEach(c => {
     const sw = document.createElement('div');
     sw.className = 'color-swatch';
-    sw.style.background = c.hex;
+    if (c.swatch) {
+      sw.style.backgroundImage = `url(${c.swatch})`;
+      sw.style.backgroundSize = 'cover';
+    } else {
+      sw.style.background = c.hex;
+    }
     sw.innerHTML = `<span class="swatch-name">${c.name}</span>`;
     sw.onclick = () => {
       document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('selected'));
@@ -715,7 +724,7 @@ function buildColorGrid(skus) {
 function updateProductImage(color) {
   const wrap = document.getElementById('detail-img-wrap');
   const sku = color.skus[0];
-  const imgUrl = sku && (sku.Image || sku.image || sku.FrontImage || '');
+  const imgUrl = sku && (sku.colorFrontImage || sku.colorSideImage || '');
   if (imgUrl) {
     wrap.innerHTML = `<img src="${imgUrl}" alt="${color.name}" onerror="this.parentNode.innerHTML='<span class=no-img>No image</span>'">`;
   } else {
@@ -729,9 +738,9 @@ function buildSizeTable(skus) {
   state.sizes = [];
 
   skus.forEach(s => {
-    const size  = s.SizeName || s.sizeName || s.Size || s.size || '?';
-    const qty   = parseInt(s.QuantityAvailable || s.quantityAvailable || s.Qty || 0);
-    const sku   = s.SKU || s.sku || s.Sku || '';
+    const size  = s.sizeName || s.SizeName || '?';
+    const qty   = parseInt(s.quantityAvailable || s.QuantityAvailable || 0);
+    const sku   = s.sku || s.SKU || '';
 
     const stockClass = qty === 0 ? 'out' : qty < 12 ? 'low' : 'in';
     const stockLabel = qty === 0 ? 'Out of stock' : qty < 12 ? `Low (${qty})` : `In stock`;
@@ -829,9 +838,9 @@ Email:  ${email}
 Phone:  ${phone || 'Not provided'}
 
 ORDER DETAILS
-Product:  ${p.Title || p.StyleName || 'Item'}
-Style #:  ${p.StyleID || p.styleID || ''}
-Brand:    ${p.BrandName || p.Brand || ''}
+Product:  ${p.title || p.Title || p.styleName || 'Item'}
+Style #:  ${p.styleName || p.styleID || ''}
+Brand:    ${p.brandName || p.BrandName || ''}
 Color:    ${state.color?.name || ''}
 Service:  ${state.service}
 
