@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Custom Apparel Configurator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  /* ── CONFIG ── Replace with your real values before going live */
+  :root {
+    --ss-api-key: "YOUR_SS_API_KEY_HERE";
+    --your-email: "YOUR_EMAIL@YOURDOMAIN.COM";
+    --emailjs-service: "YOUR_EMAILJS_SERVICE_ID";
+    --emailjs-template: "YOUR_EMAILJS_TEMPLATE_ID";
+    --emailjs-public: "YOUR_EMAILJS_PUBLIC_KEY";
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --ink: #1a1a1a;
+    --ink2: #4a4a4a;
+    --ink3: #8a8a8a;
+    --paper: #f7f4ef;
+    --paper2: #edeae3;
+    --paper3: #e0dcd4;
+    --accent: #c8392b;
+    --accent2: #e8551e;
+    --white: #ffffff;
+    --radius: 12px;
+    --radius-sm: 6px;
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.12);
+    --font-display: 'DM Serif Display', Georgia, serif;
+    --font-body: 'DM Sans', sans-serif;
+  }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    line-height: 1.6;
+  }
+
+  /* ── HEADER ── */
+  .site-header {
+    background: var(--ink);
+    color: var(--white);
+    padding: 18px 40px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .site-header h1 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+  }
+  .site-header .badge {
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 20px;
+  }
+
+  /* ── LAYOUT ── */
+  .app {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
+
+  .steps-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 40px;
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 6px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .step-btn {
+    flex: 1;
+    padding: 10px 8px;
+    background: none;
+    border: none;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ink3);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all .2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+  .step-btn .num {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--paper2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 500;
+    flex-shrink: 0;
+    transition: all .2s;
+  }
+  .step-btn.active {
+    background: var(--ink);
+    color: var(--white);
+    font-weight: 500;
+  }
+  .step-btn.active .num { background: var(--accent); color: #fff; }
+  .step-btn.done { color: var(--ink2); }
+  .step-btn.done .num { background: #d4edda; color: #1a6a2e; }
+
+  /* ── PANELS ── */
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadeUp .3s ease; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+
+  .panel-title {
+    font-family: var(--font-display);
+    font-size: 28px;
+    font-weight: 400;
+    margin-bottom: 6px;
+  }
+  .panel-sub {
+    color: var(--ink3);
+    font-size: 14px;
+    margin-bottom: 28px;
+  }
+
+  /* ── SEARCH ── */
+  .search-wrap {
+    position: relative;
+    margin-bottom: 28px;
+  }
+  .search-wrap input {
+    width: 100%;
+    padding: 14px 20px 14px 48px;
+    border: 1.5px solid var(--paper3);
+    border-radius: var(--radius);
+    font-family: var(--font-body);
+    font-size: 15px;
+    background: var(--white);
+    color: var(--ink);
+    outline: none;
+    transition: border-color .2s;
+  }
+  .search-wrap input:focus { border-color: var(--ink); }
+  .search-wrap input::placeholder { color: var(--ink3); }
+  .search-icon {
+    position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+    color: var(--ink3); pointer-events: none;
+  }
+  .search-btn {
+    position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+    background: var(--ink);
+    color: #fff;
+    border: none;
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  .search-btn:hover { background: var(--accent); }
+
+  /* ── PRODUCT GRID ── */
+  .product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .product-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all .2s;
+    box-shadow: var(--shadow);
+  }
+  .product-card:hover { border-color: var(--ink); transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+  .product-card.selected { border-color: var(--accent); }
+  .product-card img {
+    width: 100%; height: 180px; object-fit: cover;
+    background: var(--paper2);
+    display: block;
+  }
+  .product-card .img-placeholder {
+    width: 100%; height: 180px;
+    background: var(--paper2);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--ink3); font-size: 13px;
+  }
+  .product-card .card-body { padding: 14px; }
+  .product-card .card-style { font-size: 11px; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.06em; }
+  .product-card .card-name { font-size: 14px; font-weight: 500; margin: 4px 0 6px; line-height: 1.3; }
+  .product-card .card-brand { font-size: 12px; color: var(--ink3); }
+
+  /* ── COLOR PICKER ── */
+  .color-grid {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-bottom: 28px;
+  }
+  .color-swatch {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 3px solid transparent;
+    cursor: pointer;
+    position: relative;
+    transition: all .15s;
+    outline: 2px solid var(--paper3);
+  }
+  .color-swatch:hover { transform: scale(1.12); }
+  .color-swatch.selected { border-color: var(--ink); outline-color: var(--ink); }
+  .color-swatch .swatch-name {
+    display: none;
+    position: absolute; bottom: -22px; left: 50%; transform: translateX(-50%);
+    white-space: nowrap; font-size: 10px; color: var(--ink2); background: var(--white);
+    padding: 2px 6px; border-radius: 4px; box-shadow: var(--shadow);
+    pointer-events: none;
+  }
+  .color-swatch:hover .swatch-name { display: block; }
+  .color-label { font-size: 14px; color: var(--ink2); margin-bottom: 10px; font-weight: 500; }
+
+  /* ── PRODUCT DETAIL ── */
+  .detail-layout {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 32px;
+    align-items: start;
+  }
+  @media (max-width: 680px) { .detail-layout { grid-template-columns: 1fr; } }
+  .detail-img {
+    border-radius: var(--radius);
+    overflow: hidden;
+    background: var(--paper2);
+    aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .detail-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .detail-img .no-img { color: var(--ink3); font-size: 14px; }
+  .detail-info .brand { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink3); margin-bottom: 4px; }
+  .detail-info h2 { font-family: var(--font-display); font-size: 24px; font-weight: 400; margin-bottom: 4px; }
+  .detail-info .style-num { font-size: 13px; color: var(--ink3); margin-bottom: 20px; }
+
+  /* ── SIZE QTY TABLE ── */
+  .size-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .size-table th {
+    text-align: center; padding: 8px 6px;
+    font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--ink3); border-bottom: 1.5px solid var(--paper3);
+  }
+  .size-table td { padding: 8px 6px; text-align: center; vertical-align: middle; }
+  .size-table .size-name { font-size: 13px; font-weight: 500; }
+  .size-table .stock-badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 20px;
+  }
+  .stock-badge.in { background: #d4edda; color: #1a6a2e; }
+  .stock-badge.low { background: #fff3cd; color: #856404; }
+  .stock-badge.out { background: #f8d7da; color: #842029; }
+  .size-table .qty-input {
+    width: 64px; padding: 6px 8px;
+    border: 1.5px solid var(--paper3); border-radius: var(--radius-sm);
+    font-family: var(--font-body); font-size: 14px; text-align: center;
+    outline: none; transition: border-color .15s;
+  }
+  .size-table .qty-input:focus { border-color: var(--ink); }
+  .size-table .qty-input:disabled { background: var(--paper2); color: var(--ink3); }
+
+  /* ── SERVICE SELECTOR ── */
+  .service-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+    margin-bottom: 28px;
+  }
+  @media (max-width: 520px) { .service-grid { grid-template-columns: 1fr; } }
+  .service-card {
+    border: 2px solid var(--paper3);
+    border-radius: var(--radius);
+    padding: 20px 16px;
+    cursor: pointer;
+    transition: all .2s;
+    text-align: center;
+    background: var(--white);
+  }
+  .service-card:hover { border-color: var(--ink2); }
+  .service-card.selected { border-color: var(--accent); background: #fff5f4; }
+  .service-card .svc-icon { font-size: 28px; margin-bottom: 10px; }
+  .service-card .svc-name { font-weight: 500; font-size: 15px; margin-bottom: 4px; }
+  .service-card .svc-desc { font-size: 12px; color: var(--ink3); line-height: 1.4; }
+
+  /* ── FORM ── */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 520px) { .form-grid { grid-template-columns: 1fr; } }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  .field label { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink2); }
+  .field input, .field textarea, .field select {
+    padding: 11px 14px;
+    border: 1.5px solid var(--paper3);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body); font-size: 14px;
+    background: var(--white); color: var(--ink);
+    outline: none; transition: border-color .2s;
+    resize: vertical;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--ink); }
+
+  /* ── ORDER SUMMARY ── */
+  .summary-box {
+    background: var(--white);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 24px;
+    box-shadow: var(--shadow);
+  }
+  .summary-box h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink3); margin-bottom: 14px; }
+  .summary-row { display: flex; justify-content: space-between; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--paper2); font-size: 14px; }
+  .summary-row:last-child { border-bottom: none; }
+  .summary-row .label { color: var(--ink2); }
+  .summary-row .val { font-weight: 500; }
+
+  /* ── BUTTONS ── */
+  .btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 32px; }
+  .btn {
+    padding: 13px 28px;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 14px; font-weight: 500;
+    border: none; cursor: pointer;
+    transition: all .2s;
+  }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:hover { background: var(--accent); }
+  .btn-primary:disabled { background: var(--ink3); cursor: not-allowed; }
+  .btn-secondary { background: var(--paper2); color: var(--ink); }
+  .btn-secondary:hover { background: var(--paper3); }
+  .btn-outline { background: none; border: 1.5px solid var(--paper3); color: var(--ink2); }
+  .btn-outline:hover { border-color: var(--ink); color: var(--ink); }
+
+  /* ── LOADING / EMPTY ── */
+  .loading { text-align: center; padding: 60px 20px; color: var(--ink3); }
+  .spinner {
+    width: 32px; height: 32px; border: 3px solid var(--paper3);
+    border-top-color: var(--ink); border-radius: 50%;
+    animation: spin .7s linear infinite; margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; padding: 60px 20px; color: var(--ink3); font-size: 15px; }
+
+  /* ── SUCCESS ── */
+  .success-screen {
+    text-align: center; padding: 60px 20px;
+  }
+  .success-icon {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: #d4edda; color: #1a6a2e;
+    font-size: 28px; display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 24px;
+  }
+  .success-screen h2 { font-family: var(--font-display); font-size: 30px; margin-bottom: 10px; }
+  .success-screen p { color: var(--ink2); max-width: 420px; margin: 0 auto 28px; }
+
+  /* ── NOTICE ── */
+  .notice {
+    background: #fff3cd; border: 1px solid #ffc107; border-radius: var(--radius-sm);
+    padding: 12px 16px; font-size: 13px; color: #664d03; margin-bottom: 20px;
+  }
+  .notice a { color: var(--accent); }
+
+  .tag {
+    display: inline-block;
+    background: var(--paper2); color: var(--ink2);
+    font-size: 11px; padding: 3px 8px; border-radius: 20px;
+    margin: 2px;
+  }
+</style>
+</head>
+<body>
+
+<header class="site-header">
+  <h1>Custom Apparel</h1>
+  <span class="badge">Configure &amp; Quote</span>
+</header>
+
+<div class="app">
+
+  <!-- Steps bar -->
+  <div class="steps-bar">
+    <button class="step-btn active" id="step-btn-1" onclick="goStep(1)">
+      <span class="num">1</span> Product
+    </button>
+    <button class="step-btn" id="step-btn-2" onclick="goStep(2)">
+      <span class="num">2</span> Color &amp; Qty
+    </button>
+    <button class="step-btn" id="step-btn-3" onclick="goStep(3)">
+      <span class="num">3</span> Service
+    </button>
+    <button class="step-btn" id="step-btn-4" onclick="goStep(4)">
+      <span class="num">4</span> Quote
+    </button>
+  </div>
+
+  <!-- ══ STEP 1: Search & Select Product ══ -->
+  <div class="panel active" id="panel-1">
+    <p class="panel-title">Find your product</p>
+    <p class="panel-sub">Search S&amp;S Activewear's catalog by style number, brand, or keyword.</p>
+
+    <div class="notice" id="demo-notice">
+      <strong>Developer setup needed:</strong> Replace <code>YOUR_SS_API_KEY_HERE</code> at the top of this file with your real S&amp;S API key. 
+      The search below runs against the live S&amp;S REST API at <code>api.ssactivewear.com/v2</code>. 
+      <a href="#" onclick="loadDemoProducts(); return false;">Load demo data instead →</a>
+    </div>
+
+    <div class="search-wrap">
+      <svg class="search-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" id="search-input" placeholder="e.g. PC61, Gildan, performance polo…" onkeydown="if(event.key==='Enter') searchProducts()">
+      <button class="search-btn" onclick="searchProducts()">Search</button>
+    </div>
+
+    <div id="product-results">
+      <p class="empty">Search for a product to get started.</p>
+    </div>
+  </div>
+
+  <!-- ══ STEP 2: Color & Quantity ══ -->
+  <div class="panel" id="panel-2">
+    <p class="panel-title">Choose color &amp; quantities</p>
+    <p class="panel-sub">Select a color, then enter your desired quantity for each size.</p>
+
+    <div class="detail-layout">
+      <div>
+        <div class="detail-img" id="detail-img-wrap">
+          <span class="no-img">No image</span>
+        </div>
+      </div>
+      <div class="detail-info">
+        <div class="brand" id="d-brand"></div>
+        <h2 id="d-name"></h2>
+        <div class="style-num" id="d-style"></div>
+
+        <div class="color-label" id="color-label-text">Select a color:</div>
+        <div class="color-grid" id="color-grid"></div>
+
+        <table class="size-table" id="size-table">
+          <thead>
+            <tr>
+              <th>Size</th>
+              <th>Stock</th>
+              <th>Qty</th>
+            </tr>
+          </thead>
+          <tbody id="size-tbody"></tbody>
+        </table>
+
+        <div class="btn-row">
+          <button class="btn btn-secondary" onclick="goStep(1)">← Back</button>
+          <button class="btn btn-primary" id="step2-next" onclick="goStep(3)" disabled>Continue →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ STEP 3: Service Type ══ -->
+  <div class="panel" id="panel-3">
+    <p class="panel-title">Choose your service</p>
+    <p class="panel-sub">What decoration method do you need?</p>
+
+    <div class="service-grid">
+      <div class="service-card" onclick="selectService('Embroidery', this)">
+        <div class="svc-icon">🧵</div>
+        <div class="svc-name">Embroidery</div>
+        <div class="svc-desc">Thread-stitched logos. Classic, durable, professional look.</div>
+      </div>
+      <div class="service-card" onclick="selectService('Screen Print', this)">
+        <div class="svc-icon">🖨️</div>
+        <div class="svc-name">Screen Print</div>
+        <div class="svc-desc">Bold, vibrant ink printing. Best for larger quantities.</div>
+      </div>
+      <div class="service-card" onclick="selectService('UV Patch', this)">
+        <div class="svc-icon">✨</div>
+        <div class="svc-name">UV Patch</div>
+        <div class="svc-desc">3D raised patch with UV-cured finish. Premium tactile effect.</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(2)">← Back</button>
+      <button class="btn btn-primary" id="step3-next" onclick="goStep(4)" disabled>Continue →</button>
+    </div>
+  </div>
+
+  <!-- ══ STEP 4: Quote Request ══ -->
+  <div class="panel" id="panel-4">
+    <p class="panel-title">Request your quote</p>
+    <p class="panel-sub">Fill in your details and we'll send a custom quote within 24 hours.</p>
+
+    <div class="summary-box" id="order-summary"></div>
+
+    <div class="form-grid">
+      <div class="field">
+        <label>First name</label>
+        <input type="text" id="f-first" placeholder="Jane">
+      </div>
+      <div class="field">
+        <label>Last name</label>
+        <input type="text" id="f-last" placeholder="Smith">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="f-email" placeholder="jane@company.com">
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="tel" id="f-phone" placeholder="(555) 000-0000">
+      </div>
+      <div class="field full">
+        <label>Logo / Artwork notes</label>
+        <textarea id="f-notes" rows="4" placeholder="Describe your logo, placement (left chest, full back, etc.), thread colors, file format you have (AI, PDF, PNG), or any other decoration details…"></textarea>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goStep(3)">← Back</button>
+      <button class="btn btn-primary" id="submit-btn" onclick="submitQuote()">Send Quote Request</button>
+    </div>
+  </div>
+
+  <!-- ══ SUCCESS ══ -->
+  <div class="panel" id="panel-success">
+    <div class="success-screen">
+      <div class="success-icon">✓</div>
+      <h2>Quote request sent!</h2>
+      <p>We've received your request and will send a detailed quote to your email within 24 hours. We'll reach out if we have any questions about your artwork.</p>
+      <button class="btn btn-primary" onclick="resetApp()">Start another order</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  CONFIGURATION — update these before launch
+// ─────────────────────────────────────────────
+// S&S credentials are now stored securely in Vercel environment variables.
+// Do NOT put your API key or username here — the /api/ proxy handles auth server-side.
+const YOUR_EMAIL  = "YOUR_EMAIL@YOURDOMAIN.COM"; // Where quote emails go
+
+// EmailJS (free tier handles ~200 emails/month — sign up at emailjs.com)
+// Alternatively swap submitQuote() to call your own backend endpoint
+const EMAILJS_SERVICE  = "YOUR_EMAILJS_SERVICE_ID";
+const EMAILJS_TEMPLATE = "YOUR_EMAILJS_TEMPLATE_ID";
+const EMAILJS_PUBLIC   = "YOUR_EMAILJS_PUBLIC_KEY";
+
+const SS_BASE = "https://api.ssactivewear.com/v2";
+
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+let state = {
+  currentStep: 1,
+  product: null,      // full product object
+  color: null,        // selected color object
+  sizes: [],          // [{ size, sku, stock, qty }]
+  service: null,
+};
+
+// ─────────────────────────────────────────────
+//  STEP NAV
+// ─────────────────────────────────────────────
+function goStep(n) {
+  if (n > state.currentStep) return; // only allow forward from button clicks
+  _setStep(n);
+}
+function _setStep(n) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.step-btn').forEach((b,i) => {
+    b.classList.remove('active','done');
+    if (i+1 < n) b.classList.add('done');
+    if (i+1 === n) b.classList.add('active');
+  });
+  const target = n <= 4 ? document.getElementById('panel-'+n) : document.getElementById('panel-success');
+  if (target) target.classList.add('active');
+  state.currentStep = n;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─────────────────────────────────────────────
+//  STEP 1 — SEARCH
+// ─────────────────────────────────────────────
+async function searchProducts() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+  const el = document.getElementById('product-results');
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Searching S&amp;S catalog…</div>';
+
+  try {
+    // S&S API: search styles
+    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+    if (!res.ok) throw new Error(`API error ${res.status}`);
+    const data = await res.json();
+    renderProductGrid(Array.isArray(data) ? data : (data.Styles || data.styles || []));
+  } catch(e) {
+    el.innerHTML = `<div class="empty">
+      Could not reach S&amp;S API. <br><small style="color:#aaa">${e.message}</small><br><br>
+      <a href="#" onclick="loadDemoProducts(); return false;" style="color:var(--accent)">Load demo data instead →</a>
+    </div>`;
+  }
+}
+
+function renderProductGrid(products) {
+  const el = document.getElementById('product-results');
+  if (!products.length) { el.innerHTML = '<div class="empty">No products found. Try a different search.</div>'; return; }
+
+  el.innerHTML = '<div class="product-grid" id="pg"></div>';
+  const grid = document.getElementById('pg');
+  products.forEach(p => {
+    // S&S styles endpoint field names: styleID, title, brandName, styleName, styleImage
+    const styleId = p.styleID || p.StyleID || '';
+    const name  = p.title || p.Title || p.styleName || 'Product';
+    const brand = p.brandName || p.BrandName || '';
+    const style = p.styleName || styleId || '';
+    // styleImage is available from the styles endpoint
+    const img = p.styleImage || '';
+
+    const card = document.createElement('div');
+    card.className = 'product-card';
+    card.innerHTML = img
+      ? `<img src="${img}" alt="${name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    card.innerHTML += `<div class="img-placeholder" ${img ? 'style="display:none"' : ''}>No image</div>
+      <div class="card-body">
+        <div class="card-style">${style}</div>
+        <div class="card-name">${name}</div>
+        <div class="card-brand">${brand}</div>
+      </div>`;
+    card.onclick = () => selectProduct(p, card);
+    grid.appendChild(card);
+  });
+}
+
+async function selectProduct(p, cardEl) {
+  document.querySelectorAll('.product-card').forEach(c => c.classList.remove('selected'));
+  cardEl.classList.add('selected');
+  state.product = p;
+  await loadProductDetail(p);
+  _setStep(2);
+}
+
+// ─────────────────────────────────────────────
+//  STEP 2 — COLOR & QTY
+// ─────────────────────────────────────────────
+async function loadProductDetail(p) {
+  // Use numeric styleID for SKU/inventory lookup
+  const styleId = p.styleID || p.StyleID || '';
+
+  // Populate basic info
+  document.getElementById('d-brand').textContent = p.brandName || p.BrandName || '';
+  document.getElementById('d-name').textContent  = p.title || p.Title || p.styleName || 'Product';
+  document.getElementById('d-style').textContent = `Style# ${p.styleName || styleId}`;
+
+  // Fetch SKUs (colors + sizes + inventory)
+  try {
+    const res = await fetch(`/api/skus?styleID=${encodeURIComponent(styleId)}`);
+    const skus = await res.json();
+    buildColorGrid(Array.isArray(skus) ? skus : (skus.Skus || skus.skus || []));
+  } catch(e) {
+    // Demo fallback
+    buildColorGrid(demoSkus(styleId));
+  }
+}
+
+function buildColorGrid(skus) {
+  // Group by color
+  const byColor = {};
+  skus.forEach(s => {
+    const cname = s.colorName || s.ColorName || 'Default';
+    const chex  = s.color1 || s.colorCode || '#cccccc';
+    const swatch = s.colorSwatchImage || '';
+    if (!byColor[cname]) byColor[cname] = { name: cname, hex: chex, swatch, skus: [] };
+    byColor[cname].skus.push(s);
+  });
+
+  const grid = document.getElementById('color-grid');
+  grid.innerHTML = '';
+  Object.values(byColor).forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'color-swatch';
+    if (c.swatch) {
+      sw.style.backgroundImage = `url(${c.swatch})`;
+      sw.style.backgroundSize = 'cover';
+    } else {
+      sw.style.background = c.hex;
+    }
+    sw.innerHTML = `<span class="swatch-name">${c.name}</span>`;
+    sw.onclick = () => {
+      document.querySelectorAll('.color-swatch').forEach(x => x.classList.remove('selected'));
+      sw.classList.add('selected');
+      state.color = c;
+      document.getElementById('color-label-text').textContent = `Color: ${c.name}`;
+      buildSizeTable(c.skus);
+      updateProductImage(c);
+    };
+    grid.appendChild(sw);
+  });
+
+  // Auto-select first color
+  if (grid.firstChild) grid.firstChild.click();
+}
+
+function updateProductImage(color) {
+  const wrap = document.getElementById('detail-img-wrap');
+  const sku = color.skus[0];
+  const imgUrl = sku && (sku.colorFrontImage || sku.colorSideImage || '');
+  if (imgUrl) {
+    wrap.innerHTML = `<img src="${imgUrl}" alt="${color.name}" onerror="this.parentNode.innerHTML='<span class=no-img>No image</span>'">`;
+  } else {
+    wrap.innerHTML = `<span class="no-img">No image available</span>`;
+  }
+}
+
+function buildSizeTable(skus) {
+  const tbody = document.getElementById('size-tbody');
+  tbody.innerHTML = '';
+  state.sizes = [];
+
+  skus.forEach(s => {
+    const size  = s.sizeName || s.SizeName || '?';
+    const qty   = parseInt(s.quantityAvailable || s.QuantityAvailable || 0);
+    const sku   = s.sku || s.SKU || '';
+
+    const stockClass = qty === 0 ? 'out' : qty < 12 ? 'low' : 'in';
+    const stockLabel = qty === 0 ? 'Out of stock' : qty < 12 ? `Low (${qty})` : `In stock`;
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td class="size-name">${size}</td>
+      <td><span class="stock-badge ${stockClass}">${stockLabel}</span></td>
+      <td><input class="qty-input" type="number" min="0" max="${qty}" value="0"
+           ${qty === 0 ? 'disabled' : ''}
+           data-sku="${sku}" data-size="${size}"
+           oninput="updateSizeState(this)"></td>`;
+    tbody.appendChild(row);
+    state.sizes.push({ size, sku, stock: qty, qty: 0 });
+  });
+
+  checkStep2Valid();
+}
+
+function updateSizeState(input) {
+  const sku = input.dataset.sku;
+  const sz  = state.sizes.find(s => s.sku === sku || s.size === input.dataset.size);
+  if (sz) sz.qty = parseInt(input.value) || 0;
+  checkStep2Valid();
+}
+
+function checkStep2Valid() {
+  const total = state.sizes.reduce((a,s) => a + s.qty, 0);
+  document.getElementById('step2-next').disabled = (total === 0 || !state.color);
+}
+
+// ─────────────────────────────────────────────
+//  STEP 3 — SERVICE
+// ─────────────────────────────────────────────
+function selectService(name, el) {
+  document.querySelectorAll('.service-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  state.service = name;
+  document.getElementById('step3-next').disabled = false;
+}
+
+// ─────────────────────────────────────────────
+//  STEP 4 — QUOTE SUMMARY
+// ─────────────────────────────────────────────
+function goStep(n) {
+  if (n === 4) buildSummary();
+  _setStep(n);
+}
+
+function buildSummary() {
+  const p = state.product;
+  const ordered = state.sizes.filter(s => s.qty > 0);
+  const total = ordered.reduce((a,s) => a+s.qty, 0);
+
+  const sizeList = ordered.map(s => `${s.size}: ${s.qty}`).join(' · ');
+
+  document.getElementById('order-summary').innerHTML = `
+    <h3>Order summary</h3>
+    <div class="summary-row"><span class="label">Product</span><span class="val">${p.Title || p.StyleName || 'Item'}</span></div>
+    <div class="summary-row"><span class="label">Style #</span><span class="val">${p.StyleID || p.styleID || ''}</span></div>
+    <div class="summary-row"><span class="label">Color</span><span class="val">${state.color?.name || ''}</span></div>
+    <div class="summary-row"><span class="label">Sizes &amp; qty</span><span class="val" style="text-align:right;max-width:60%">${sizeList}</span></div>
+    <div class="summary-row"><span class="label">Total pieces</span><span class="val">${total}</span></div>
+    <div class="summary-row"><span class="label">Service</span><span class="val">${state.service}</span></div>
+  `;
+}
+
+// ─────────────────────────────────────────────
+//  SUBMIT QUOTE
+// ─────────────────────────────────────────────
+async function submitQuote() {
+  const first = document.getElementById('f-first').value.trim();
+  const last  = document.getElementById('f-last').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+  const notes = document.getElementById('f-notes').value.trim();
+
+  if (!first || !email) { alert('Please enter your name and email.'); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  const p = state.product;
+  const ordered = state.sizes.filter(s => s.qty > 0);
+  const total = ordered.reduce((a,s) => a+s.qty, 0);
+  const sizeBreakdown = ordered.map(s => `${s.size}: ${s.qty}`).join(', ');
+
+  const body = `
+NEW CUSTOM APPAREL QUOTE REQUEST
+=================================
+
+CUSTOMER
+Name:   ${first} ${last}
+Email:  ${email}
+Phone:  ${phone || 'Not provided'}
+
+ORDER DETAILS
+Product:  ${p.title || p.Title || p.styleName || 'Item'}
+Style #:  ${p.styleName || p.styleID || ''}
+Brand:    ${p.brandName || p.BrandName || ''}
+Color:    ${state.color?.name || ''}
+Service:  ${state.service}
+
+SIZES & QUANTITIES
+${sizeBreakdown}
+Total pieces: ${total}
+
+ARTWORK / LOGO NOTES
+${notes || 'None provided'}
+  `.trim();
+
+  // ── Option A: EmailJS (recommended for Shopify — no backend needed)
+  // Uncomment and configure EmailJS template variables: {{to_email}}, {{subject}}, {{body}}
+  /*
+  try {
+    await emailjs.init(EMAILJS_PUBLIC);
+    await emailjs.send(EMAILJS_SERVICE, EMAILJS_TEMPLATE, {
+      to_email: YOUR_EMAIL,
+      reply_to: email,
+      subject: `Quote Request — ${p.StyleName || 'Item'} x${total} — ${first} ${last}`,
+      body: body,
+      customer_name: `${first} ${last}`,
+      customer_email: email,
+    });
+    showSuccess();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Send Quote Request';
+    alert('Could not send. Please try again or email us directly.');
+    console.error(e);
+  }
+  */
+
+  // ── Option B: Your own backend endpoint
+  // Replace the URL below with your server route that sends the email
+  /*
+  try {
+    const r = await fetch('/api/quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name:`${first} ${last}`, email, phone, product: p, color: state.color, sizes: ordered, service: state.service, notes })
+    });
+    if (!r.ok) throw new Error();
+    showSuccess();
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Send Quote Request';
+    alert('Could not send. Please try again.');
+  }
+  */
+
+  // ── DEMO MODE: just show success screen
+  console.log('Quote would be sent:\n\n' + body);
+  setTimeout(showSuccess, 800);
+}
+
+function showSuccess() {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.step-btn').forEach(b => { b.classList.remove('active'); b.classList.add('done'); });
+  document.getElementById('panel-success').classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetApp() {
+  state = { currentStep: 1, product: null, color: null, sizes: [], service: null };
+  document.getElementById('search-input').value = '';
+  document.getElementById('product-results').innerHTML = '<p class="empty">Search for a product to get started.</p>';
+  document.querySelectorAll('.service-card').forEach(c => c.classList.remove('selected'));
+  _setStep(1);
+}
+
+// ─────────────────────────────────────────────
+//  DEMO DATA (used when API key not yet set)
+// ─────────────────────────────────────────────
+function loadDemoProducts() {
+  document.getElementById('demo-notice').style.display = 'none';
+  const demos = [
+    { StyleID:'PC61', Title:'Essential Tee', BrandName:'Port & Company', Image:'https://images.ssactivewear.com/im/1-0-0/500/PC61_FRONT.jpg' },
+    { StyleID:'G500', Title:'Heavy Cotton Tee', BrandName:'Gildan', Image:'https://images.ssactivewear.com/im/1-0-0/500/G500_FRONT.jpg' },
+    { StyleID:'TW500', Title:'Moisture Wicking Polo', BrandName:'Team 365', Image:'https://images.ssactivewear.com/im/1-0-0/500/TW500_FRONT.jpg' },
+    { StyleID:'K500', Title:'Silk Touch Polo', BrandName:"Port Authority", Image:'https://images.ssactivewear.com/im/1-0-0/500/K500_FRONT.jpg' },
+    { StyleID:'J317', Title:'All-Weather 3-in-1 Jacket', BrandName:'Port Authority', Image:'https://images.ssactivewear.com/im/1-0-0/500/J317_FRONT.jpg' },
+    { StyleID:'NE400', Title:'Performance Longsleeve', BrandName:'New Era', Image:'https://images.ssactivewear.com/im/1-0-0/500/NE400_FRONT.jpg' },
+  ];
+  renderProductGrid(demos);
+}
+
+function demoSkus(styleId) {
+  const colors = [
+    { ColorName:'Black', ColorCode:'#1a1a1a' },
+    { ColorName:'Navy', ColorCode:'#1e3a5f' },
+    { ColorName:'White', ColorCode:'#f5f5f5' },
+    { ColorName:'Red', ColorCode:'#c8392b' },
+    { ColorName:'Royal Blue', ColorCode:'#2563eb' },
+    { ColorName:'Forest Green', ColorCode:'#166534' },
+  ];
+  const sizes = ['XS','S','M','L','XL','2XL','3XL'];
+  const skus = [];
+  colors.forEach(c => {
+    sizes.forEach(sz => {
+      skus.push({
+        SKU: `${styleId}-${c.ColorName.replace(/\s/g,'')}-${sz}`,
+        ColorName: c.ColorName, ColorCode: c.ColorCode,
+        SizeName: sz,
+        QuantityAvailable: Math.random() < 0.1 ? 0 : Math.floor(Math.random() * 200) + 5,
+        Image: `https://images.ssactivewear.com/im/1-0-0/500/${styleId}_FRONT.jpg`
+      });
+    });
+  });
+  return skus;
+}
+
+// Allow forward navigation from next buttons
+const origGoStep = goStep;
+</script>
+
+<!-- Optional: load EmailJS if you use Option A above -->
+<!-- <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script> -->
+
+</body>
+</html>
