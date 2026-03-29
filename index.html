@@ -920,17 +920,23 @@ function isHat(item) {
 }
 
 const PLACEMENTS = {
-  'Embroidery': ['Front left chest', 'Front right chest'],
-  'Print':      ['Front', 'Back', 'Left sleeve', 'Right sleeve'],
-  'UV Patch':   ['Front', 'Back', 'Left side (wearing)', 'Right side (wearing)'],
+  'Embroidery':       ['Front left chest', 'Front right chest'],
+  'Print':            ['Front', 'Back', 'Left sleeve', 'Right sleeve'],
+  'Print_Hat':        ['Front'],
+  'UV Patch':         ['Front', 'Back', 'Left side (wearing)', 'Right side (wearing)'],
 };
+
+function getPlacementKey(item) {
+  if (item.service === 'Print' && isHat(item)) return 'Print_Hat';
+  return item.service;
+}
 
 const PILL_OFF = "padding:7px 16px;border-radius:999px;border:2px solid #cccccc;background:#ffffff;font-size:12px;font-weight:400;color:#999999;cursor:pointer;font-family:inherit;margin:0;";
 const PILL_ON  = "padding:7px 16px;border-radius:999px;border:2px solid #555555;background:#555555;font-size:12px;font-weight:700;color:#ffffff;cursor:pointer;font-family:inherit;margin:0;";
 
 function buildPlacementHTML(item) {
   if (!item.service) return '';
-  const opts = PLACEMENTS[item.service] || [];
+  const opts = PLACEMENTS[getPlacementKey(item)] || [];
   const selected = item.placements || [];
   const isEmb = item.service === 'Embroidery';
 
@@ -1429,9 +1435,42 @@ function goStep(n) {
   _setStep(n);
 }
 
+function buildSummaryServicePills(item) {
+  const services = ['Embroidery', 'Print'];
+  if (isHat(item)) services.push('UV Patch');
+  return services.map(svc => {
+    const on = item.service === svc;
+    const icons = { 'Embroidery': '🧵', 'Print': '🖨️', 'UV Patch': '✨' };
+    return `<button style="${on ? SVC_ON : SVC_OFF}" onclick="setSummaryService(${item.id},'${svc}',this)">${icons[svc]} ${svc}</button>`;
+  }).join('');
+}
+
+const SVC_OFF = "padding:7px 16px;border-radius:999px;border:2px solid #cccccc;background:#ffffff;font-size:12px;font-weight:400;color:#999999;cursor:pointer;font-family:inherit;margin:0;";
+const SVC_ON  = "padding:7px 16px;border-radius:999px;border:2px solid #555555;background:#555555;font-size:12px;font-weight:700;color:#ffffff;cursor:pointer;font-family:inherit;margin:0;";
+
+function setSummaryService(id, svc, pillEl) {
+  const item = cart.find(i => i.id === id);
+  if (!item) return;
+  item.service = svc;
+  item.placements = [];
+  item.customPlacement = '';
+  saveCart();
+  // Re-render the whole summary so service + placement both update
+  buildSummary();
+  // Also sync bag drawer
+  const svcPills = document.querySelector('#cart-item-' + id + ' .svc-pills');
+  if (svcPills) {
+    svcPills.querySelectorAll('.svc-pill').forEach(p => p.classList.remove('active'));
+    svcPills.querySelectorAll('.svc-pill').forEach(p => { if (p.textContent.includes(svc)) p.classList.add('active'); });
+  }
+  const bagPlacement = document.getElementById('placement-' + id);
+  if (bagPlacement) bagPlacement.innerHTML = buildPlacementHTML(item);
+  updateCartCheckoutBtn();
+}
+
 function buildSummaryPlacementPills(item) {
   if (!item.service) return '<span style="color:#999;font-size:12px">Select a service first</span>';
-  const opts = PLACEMENTS[item.service] || [];
+  const opts = PLACEMENTS[getPlacementKey(item)] || [];
   const selected = item.placements || [];
   const isEmb = item.service === 'Embroidery';
 
@@ -1504,7 +1543,10 @@ function buildSummary() {
       html += `
         <div class="summary-row"><span class="label">Color</span><span class="val">${item.color.name}</span></div>
         <div class="summary-row"><span class="label">Sizes &amp; qty</span><span class="val" style="text-align:right;max-width:58%;font-size:13px;line-height:1.5">${sizeList}</span></div>
-        <div class="summary-row"><span class="label">Service</span><span class="val">${item.service || '—'}</span></div>
+        <div class="summary-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+          <span class="label" style="color:var(--ink2)">Service</span>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">${buildSummaryServicePills(item)}</div>
+        </div>
         <div class="summary-row" style="flex-direction:column;align-items:flex-start;gap:6px">
           <span class="label" style="color:var(--ink2)">Placement <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink3);font-size:11px">(can select multiple)</span></span>
           <div class="placement-pills" style="margin:0">${buildSummaryPlacementPills(item)}</div>
