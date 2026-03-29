@@ -1057,12 +1057,14 @@ function isHat(item) {
 
 const PLACEMENTS = {
   'Embroidery':       ['Front left chest', 'Front right chest'],
+  'Embroidery_Hat':   ['Front', 'Back', 'Left (wearing)', 'Right (wearing)'],
   'Print':            ['Front', 'Back', 'Left sleeve', 'Right sleeve'],
   'Print_Hat':        ['Front'],
   'UV Patch':         ['Front', 'Back', 'Left side (wearing)', 'Right side (wearing)'],
 };
 
 function getPlacementKey(item) {
+  if (item.service === 'Embroidery' && isHat(item)) return 'Embroidery_Hat';
   if (item.service === 'Print' && isHat(item)) return 'Print_Hat';
   return item.service;
 }
@@ -1726,7 +1728,7 @@ function buildSummary() {
         <div class="summary-row" style="flex-direction:column;align-items:flex-start;gap:6px">
           <span class="label" style="color:var(--ink2)">Placement <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink3);font-size:11px">(can select multiple)</span></span>
           <div class="placement-pills" style="margin:0">${buildSummaryPlacementPills(item)}</div>
-          ${item.service==='Embroidery' && item.placements && item.placements.includes('Custom') ? `<input class="placement-custom visible" id="summary-custom-${item.id}" type="text" placeholder="Describe placement…" value="${item.customPlacement||''}" oninput="setCustomPlacement(${item.id},this.value)">` : ''}
+          ${item.placements && item.placements.includes('Custom') ? `<input id="summary-custom-${item.id}" type="text" placeholder="Describe placement…" value="${item.customPlacement||''}" oninput="setCustomPlacement(${item.id},this.value)" style="display:block;width:100%;padding:7px 10px;margin-top:8px;border:1.5px solid #ccc;border-radius:6px;font-family:inherit;font-size:13px;color:#1a1a1a;background:#fff;outline:none;box-sizing:border-box;">` : ''}
         </div>
         <div class="summary-row" style="margin-bottom:4px"><span class="label">Pieces</span><span class="val">${total}</span></div>
         <div style="text-align:right;margin-bottom:10px">
