@@ -1853,6 +1853,12 @@ ${notes || 'None provided'}
 }
 
 function showSuccess() {
+  // Clear bag and artwork after successful submission
+  cart = [];
+  saveCart();
+  artworkFiles = [];
+  renderArtworkFiles();
+  updateCartUI();
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.step-btn').forEach(b => { b.classList.remove('active'); b.classList.add('done'); });
   document.getElementById('panel-success').classList.add('active');
