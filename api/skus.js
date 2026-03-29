@@ -1,5 +1,6 @@
 // api/skus.js
-// Fetches SKUs + inventory for a given styleID from S&S API
+// Fetches products (SKUs with color, size, image data) for a given styleID
+// The /v2/products endpoint returns quantityAvailable directly — no separate inventory call needed
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,35 +15,35 @@ export default async function handler(req, res) {
   const apiKey   = process.env.SS_API_KEY;
   if (!username || !apiKey) return res.status(500).json({ error: 'S&S credentials not configured.' });
 
-  const auth = { headers: {
-    'Authorization': 'Basic ' + Buffer.from(`${username}:${apiKey}`).toString('base64'),
-    'Accept': 'application/json',
-  }};
+  const auth = {
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(`${username}:${apiKey}`).toString('base64'),
+      'Accept': 'application/json',
+    }
+  };
 
   try {
-    // Fetch SKUs and inventory in parallel
-    const [skuRes, invRes] = await Promise.all([
-      fetch(`https://api.ssactivewear.com/v2/products?styleID=${encodeURIComponent(styleID)}`, auth),
-      fetch(`https://api.ssactivewear.com/v2/inventory?styleID=${encodeURIComponent(styleID)}`, auth),
-    ]);
+    // /v2/products returns one row per SKU with colorName, sizeName, quantityAvailable, images, etc.
+    const response = await fetch(
+      `https://api.ssactivewear.com/v2/products/${encodeURIComponent(styleID)}`,
+      auth
+    );
 
-    const skus = skuRes.ok ? await skuRes.json() : [];
-    const inv  = invRes.ok ? await invRes.json() : [];
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).json({ error: `S&S API error: ${response.status}`, detail: text });
+    }
 
-    // Build inventory lookup: sku -> qty
-    const invMap = {};
-    (Array.isArray(inv) ? inv : []).forEach(i => {
-      invMap[i.sku] = (invMap[i.sku] || 0) + (i.qty || i.quantity || 0);
-    });
+    const skus = await response.json();
 
-    // Merge inventory into skus and normalize image URLs
+    // Prepend base URL to all image fields
     const base = 'https://www.ssactivewear.com/';
     const merged = (Array.isArray(skus) ? skus : []).map(s => ({
       ...s,
-      quantityAvailable: invMap[s.sku] || 0,
-      colorFrontImage:   s.colorFrontImage   ? base + s.colorFrontImage   : '',
-      colorSwatchImage:  s.colorSwatchImage  ? base + s.colorSwatchImage  : '',
-      colorBackImage:    s.colorBackImage    ? base + s.colorBackImage    : '',
+      colorFrontImage:  s.colorFrontImage  ? base + s.colorFrontImage  : '',
+      colorSideImage:   s.colorSideImage   ? base + s.colorSideImage   : '',
+      colorBackImage:   s.colorBackImage   ? base + s.colorBackImage   : '',
+      colorSwatchImage: s.colorSwatchImage ? base + s.colorSwatchImage : '',
     }));
 
     return res.status(200).json(merged);
