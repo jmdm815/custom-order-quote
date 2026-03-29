@@ -826,12 +826,12 @@
     </div>
 
     <div class="artwork-section">
-      <label class="artwork-label">Artwork files <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink3)">(optional — up to 4 files)</span></label>
+      <label class="artwork-label">Artwork files <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink3)">(Up to 4 Files)</span></label>
       <div class="artwork-drop" id="artwork-drop" onclick="document.getElementById('artwork-input').click()" ondragover="artworkDragOver(event)" ondragleave="artworkDragLeave(event)" ondrop="artworkDrop(event)">
-        <input type="file" id="artwork-input" multiple accept=".pdf,.ai,.eps,.svg,.png,.jpg,.jpeg,.gif,.tif,.tiff,.webp" style="display:none" onchange="artworkFilesAdded(this.files)">
+        <input type="file" id="artwork-input" multiple accept=".pdf,.ai,.eps,.svg,.png,.jpg,.jpeg,.gif,.tif,.tiff,.webp,.dst,.emb" style="display:none" onchange="artworkFilesAdded(this.files)">
         <div class="artwork-drop-icon">📎</div>
         <div class="artwork-drop-text">Click to browse or drag & drop files here</div>
-        <div class="artwork-drop-sub">PDF, AI, EPS, SVG, PNG, JPG, TIF — max 4 files</div>
+        <div class="artwork-drop-sub">PDF, AI, EPS, SVG, PNG, JPG, TIF, DST, EMB — max 4 files</div>
       </div>
       <div class="artwork-files" id="artwork-files"></div>
       <div class="artwork-limit" id="artwork-limit"></div>
@@ -1928,7 +1928,7 @@ function artworkDrop(e) {
 }
 
 function artworkFilesAdded(fileList) {
-  const allowed = ['.pdf','.ai','.eps','.svg','.png','.jpg','.jpeg','.gif','.tif','.tiff','.webp'];
+  const allowed = ['.pdf','.ai','.eps','.svg','.png','.jpg','.jpeg','.gif','.tif','.tiff','.webp','.dst','.emb'];
   const remaining = 4 - artworkFiles.length;
   if (remaining <= 0) return;
 
