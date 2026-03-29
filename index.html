@@ -945,7 +945,7 @@ function buildPlacementHTML(item) {
     pills += `<input class="placement-custom${inputVisible}" id="custom-input-${item.id}" type="text" placeholder="Describe placement…" value="${customVal}" oninput="setCustomPlacement(${item.id},this.value)">`;
   }
 
-  return `<label>Placement <span style="font-weight:400;text-transform:none;letter-spacing:0">(select all that apply)</span></label>
+  return `<label>Placement <span style="font-weight:400;text-transform:none;letter-spacing:0">(can select multiple)</span></label>
     <div class="placement-pills">${pills}</div>`;
 }
 
@@ -961,11 +961,13 @@ function togglePlacement(id, opt, pillEl) {
     pillEl.classList.add('active');
   }
   saveCart();
-  // Show/hide custom input for embroidery
+  // Show/hide custom input for embroidery in bag
   if (opt === 'Custom') {
     const input = document.getElementById('custom-input-' + id);
     if (input) input.classList.toggle('visible', item.placements.includes('Custom'));
   }
+  // Sync summary placement pills if visible
+  buildSummary();
   updateCartCheckoutBtn();
 }
 
@@ -1427,6 +1429,46 @@ function goStep(n) {
   _setStep(n);
 }
 
+function buildSummaryPlacementPills(item) {
+  if (!item.service) return '<span style="color:var(--ink3);font-size:12px">Select a service first</span>';
+  const opts = PLACEMENTS[item.service] || [];
+  const selected = item.placements || [];
+  const isEmb = item.service === 'Embroidery';
+
+  let pills = opts.map(opt => {
+    const active = selected.includes(opt) ? ' active' : '';
+    return `<button class="placement-pill${active}" onclick="toggleSummaryPlacement(${item.id},'${opt.replace(/'/g,"\'")}',this)">${opt}</button>`;
+  }).join('');
+
+  if (isEmb) {
+    const customActive = selected.includes('Custom') ? ' active' : '';
+    pills += `<button class="placement-pill${customActive}" onclick="toggleSummaryPlacement(${item.id},'Custom',this)">Custom (describe)</button>`;
+  }
+  return pills;
+}
+
+function toggleSummaryPlacement(id, opt, pillEl) {
+  const item = cart.find(i => i.id === id);
+  if (!item) return;
+  if (!item.placements) item.placements = [];
+  if (item.placements.includes(opt)) {
+    item.placements = item.placements.filter(p => p !== opt);
+    pillEl.classList.remove('active');
+  } else {
+    item.placements.push(opt);
+    pillEl.classList.add('active');
+  }
+  saveCart();
+  // Show/hide custom input in summary
+  if (opt === 'Custom') {
+    const input = document.getElementById('summary-custom-' + id);
+    if (input) input.classList.toggle('visible', item.placements.includes('Custom'));
+  }
+  // Also sync bag drawer if open
+  const bagWrap = document.getElementById('placement-' + id);
+  if (bagWrap) bagWrap.innerHTML = buildPlacementHTML(item);
+}
+
 function placementDisplay(item) {
   if (!item.placements || !item.placements.length) return '—';
   const parts = item.placements.map(p => {
@@ -1465,7 +1507,11 @@ function buildSummary() {
         <div class="summary-row"><span class="label">Color</span><span class="val">${item.color.name}</span></div>
         <div class="summary-row"><span class="label">Sizes &amp; qty</span><span class="val" style="text-align:right;max-width:58%;font-size:13px;line-height:1.5">${sizeList}</span></div>
         <div class="summary-row"><span class="label">Service</span><span class="val">${item.service || '—'}</span></div>
-        <div class="summary-row"><span class="label">Placement</span><span class="val" style="text-align:right;max-width:55%;font-size:13px">${placementDisplay(item)}</span></div>
+        <div class="summary-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+          <span class="label" style="color:var(--ink2)">Placement <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--ink3);font-size:11px">(can select multiple)</span></span>
+          <div class="placement-pills" style="margin:0">${buildSummaryPlacementPills(item)}</div>
+          ${item.service==='Embroidery' && item.placements && item.placements.includes('Custom') ? `<input class="placement-custom visible" id="summary-custom-${item.id}" type="text" placeholder="Describe placement…" value="${item.customPlacement||''}" oninput="setCustomPlacement(${item.id},this.value)">` : ''}
+        </div>
         <div class="summary-row" style="margin-bottom:8px"><span class="label">Pieces</span><span class="val">${total}</span></div>`;
     });
   });
