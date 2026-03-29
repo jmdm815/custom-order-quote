@@ -43,10 +43,14 @@ export default async function handler(req, res) {
       return {
         ...s,
         quantityAvailable: warehouseQty,
-        colorFrontImage:  s.colorFrontImage  ? base + s.colorFrontImage  : '',
-        colorSideImage:   s.colorSideImage   ? base + s.colorSideImage   : '',
-        colorBackImage:   s.colorBackImage   ? base + s.colorBackImage   : '',
-        colorSwatchImage: s.colorSwatchImage ? base + s.colorSwatchImage : '',
+        colorFrontImage:        s.colorFrontImage        ? base + s.colorFrontImage        : '',
+        colorSideImage:         s.colorSideImage         ? base + s.colorSideImage         : '',
+        colorBackImage:         s.colorBackImage         ? base + s.colorBackImage         : '',
+        colorSwatchImage:       s.colorSwatchImage       ? base + s.colorSwatchImage       : '',
+        colorOnModelFrontImage: s.colorOnModelFrontImage ? base + s.colorOnModelFrontImage : '',
+        colorOnModelSideImage:  s.colorOnModelSideImage  ? base + s.colorOnModelSideImage  : '',
+        colorOnModelBackImage:  s.colorOnModelBackImage  ? base + s.colorOnModelBackImage  : '',
+        colorDirectSideImage:   s.colorDirectSideImage   ? base + s.colorDirectSideImage   : '',
       };
     });
 
