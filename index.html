@@ -950,7 +950,8 @@ function buildPlacementHTML(item) {
     const on = selected.includes('Custom');
     const inputVisible = on ? ' visible' : '';
     pills += `<button style="${on ? PILL_ON : PILL_OFF}" onclick="togglePlacement(${item.id},'Custom',this)">Custom (describe)</button>`;
-    pills += `<input class="placement-custom${inputVisible}" id="custom-input-${item.id}" type="text" placeholder="Describe placement…" value="${customVal}" oninput="setCustomPlacement(${item.id},this.value)">`;
+    const inputStyle = on ? 'display:block;width:100%;padding:7px 10px;margin-top:8px;border:1.5px solid #ccc;border-radius:6px;font-family:inherit;font-size:13px;color:#1a1a1a;background:#fff;outline:none;box-sizing:border-box;' : 'display:none;';
+    pills += `<input style="${inputStyle}" id="custom-input-${item.id}" type="text" placeholder="Describe placement…" value="${customVal}" oninput="setCustomPlacement(${item.id},this.value)">`;
   }
 
   return `<label style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:#8a8a8a;display:block;margin-bottom:8px">Placement <span style="font-weight:400;text-transform:none;letter-spacing:0">(can select multiple)</span></label>
@@ -971,7 +972,9 @@ function togglePlacement(id, opt, pillEl) {
   saveCart();
   if (opt === 'Custom') {
     const input = document.getElementById('custom-input-' + id);
-    if (input) input.classList.toggle('visible', item.placements.includes('Custom'));
+    if (input) input.style.display = item.placements.includes('Custom') ? 'block' : 'none';
+    const sinput = document.getElementById('summary-custom-' + id);
+    if (sinput) sinput.style.display = item.placements.includes('Custom') ? 'block' : 'none';
   }
   buildSummary();
   updateCartCheckoutBtn();
@@ -1500,7 +1503,9 @@ function toggleSummaryPlacement(id, opt, pillEl) {
   saveCart();
   if (opt === 'Custom') {
     const input = document.getElementById('summary-custom-' + id);
-    if (input) input.classList.toggle('visible', item.placements.includes('Custom'));
+    if (input) input.style.display = item.placements.includes('Custom') ? 'block' : 'none';
+    const binput = document.getElementById('custom-input-' + id);
+    if (binput) binput.style.display = item.placements.includes('Custom') ? 'block' : 'none';
   }
   const bagWrap = document.getElementById('placement-' + id);
   if (bagWrap) bagWrap.innerHTML = buildPlacementHTML(item);
