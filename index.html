@@ -925,6 +925,9 @@ const PLACEMENTS = {
   'UV Patch':   ['Front', 'Back', 'Left side (wearing)', 'Right side (wearing)'],
 };
 
+const PILL_OFF = "padding:7px 16px;border-radius:999px;border:2px solid #cccccc;background:#ffffff;font-size:12px;font-weight:400;color:#999999;cursor:pointer;font-family:inherit;margin:0;";
+const PILL_ON  = "padding:7px 16px;border-radius:999px;border:2px solid #555555;background:#555555;font-size:12px;font-weight:700;color:#ffffff;cursor:pointer;font-family:inherit;margin:0;";
+
 function buildPlacementHTML(item) {
   if (!item.service) return '';
   const opts = PLACEMENTS[item.service] || [];
@@ -932,20 +935,20 @@ function buildPlacementHTML(item) {
   const isEmb = item.service === 'Embroidery';
 
   let pills = opts.map(opt => {
-    const active = selected.includes(opt) ? ' active' : '';
-    return `<button class="placement-pill${active}" onclick="togglePlacement(${item.id},'${opt.replace(/'/g,"\'")}',this)">${opt}</button>`;
+    const on = selected.includes(opt);
+    return `<button style="${on ? PILL_ON : PILL_OFF}" onclick="togglePlacement(${item.id},'${opt.replace(/'/g,"\'")}',this)">${opt}</button>`;
   }).join('');
 
   if (isEmb) {
     const customVal = item.customPlacement || '';
-    const customVisible = selected.includes('Custom') ? ' active' : '';
-    const inputVisible = selected.includes('Custom') ? ' visible' : '';
-    pills += `<button class="placement-pill${customVisible}" onclick="togglePlacement(${item.id},'Custom',this)">Custom (describe)</button>`;
+    const on = selected.includes('Custom');
+    const inputVisible = on ? ' visible' : '';
+    pills += `<button style="${on ? PILL_ON : PILL_OFF}" onclick="togglePlacement(${item.id},'Custom',this)">Custom (describe)</button>`;
     pills += `<input class="placement-custom${inputVisible}" id="custom-input-${item.id}" type="text" placeholder="Describe placement…" value="${customVal}" oninput="setCustomPlacement(${item.id},this.value)">`;
   }
 
-  return `<label>Placement <span style="font-weight:400;text-transform:none;letter-spacing:0">(can select multiple)</span></label>
-    <div class="placement-pills">${pills}</div>`;
+  return `<label style="font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:#8a8a8a;display:block;margin-bottom:8px">Placement <span style="font-weight:400;text-transform:none;letter-spacing:0">(can select multiple)</span></label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;">${pills}</div>`;
 }
 
 function togglePlacement(id, opt, pillEl) {
@@ -954,18 +957,16 @@ function togglePlacement(id, opt, pillEl) {
   if (!item.placements) item.placements = [];
   if (item.placements.includes(opt)) {
     item.placements = item.placements.filter(p => p !== opt);
-    pillEl.classList.remove('active');
+    pillEl.setAttribute('style', PILL_OFF);
   } else {
     item.placements.push(opt);
-    pillEl.classList.add('active');
+    pillEl.setAttribute('style', PILL_ON);
   }
   saveCart();
-  // Show/hide custom input for embroidery in bag
   if (opt === 'Custom') {
     const input = document.getElementById('custom-input-' + id);
     if (input) input.classList.toggle('visible', item.placements.includes('Custom'));
   }
-  // Sync summary placement pills if visible
   buildSummary();
   updateCartCheckoutBtn();
 }
@@ -1429,19 +1430,19 @@ function goStep(n) {
 }
 
 function buildSummaryPlacementPills(item) {
-  if (!item.service) return '<span style="color:var(--ink3);font-size:12px">Select a service first</span>';
+  if (!item.service) return '<span style="color:#999;font-size:12px">Select a service first</span>';
   const opts = PLACEMENTS[item.service] || [];
   const selected = item.placements || [];
   const isEmb = item.service === 'Embroidery';
 
   let pills = opts.map(opt => {
-    const active = selected.includes(opt) ? ' active' : '';
-    return `<button class="placement-pill${active}" onclick="toggleSummaryPlacement(${item.id},'${opt.replace(/'/g,"\'")}',this)">${opt}</button>`;
+    const on = selected.includes(opt);
+    return `<button style="${on ? PILL_ON : PILL_OFF}" onclick="toggleSummaryPlacement(${item.id},'${opt.replace(/'/g,"\'")}',this)">${opt}</button>`;
   }).join('');
 
   if (isEmb) {
-    const customActive = selected.includes('Custom') ? ' active' : '';
-    pills += `<button class="placement-pill${customActive}" onclick="toggleSummaryPlacement(${item.id},'Custom',this)">Custom (describe)</button>`;
+    const on = selected.includes('Custom');
+    pills += `<button style="${on ? PILL_ON : PILL_OFF}" onclick="toggleSummaryPlacement(${item.id},'Custom',this)">Custom (describe)</button>`;
   }
   return pills;
 }
@@ -1452,18 +1453,16 @@ function toggleSummaryPlacement(id, opt, pillEl) {
   if (!item.placements) item.placements = [];
   if (item.placements.includes(opt)) {
     item.placements = item.placements.filter(p => p !== opt);
-    pillEl.classList.remove('active');
+    pillEl.setAttribute('style', PILL_OFF);
   } else {
     item.placements.push(opt);
-    pillEl.classList.add('active');
+    pillEl.setAttribute('style', PILL_ON);
   }
   saveCart();
-  // Show/hide custom input in summary
   if (opt === 'Custom') {
     const input = document.getElementById('summary-custom-' + id);
     if (input) input.classList.toggle('visible', item.placements.includes('Custom'));
   }
-  // Also sync bag drawer if open
   const bagWrap = document.getElementById('placement-' + id);
   if (bagWrap) bagWrap.innerHTML = buildPlacementHTML(item);
 }
