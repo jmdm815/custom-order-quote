@@ -665,8 +665,9 @@ async function selectProduct(p, cardEl) {
 //  STEP 2 — COLOR & QTY
 // ─────────────────────────────────────────────
 async function loadProductDetail(p) {
-  // Use numeric styleID for SKU/inventory lookup
+  // Use numeric styleID for SKU/inventory lookup (p.styleID is the integer, p.styleName is e.g. "2000")
   const styleId = p.styleID || p.StyleID || '';
+  console.log('Loading SKUs for styleID:', styleId, 'styleName:', p.styleName);
 
   // Populate basic info
   document.getElementById('d-brand').textContent = p.brandName || p.BrandName || '';
