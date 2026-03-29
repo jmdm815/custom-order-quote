@@ -820,7 +820,8 @@
     <div class="cart-empty">Your bag is empty. Add items from the catalog.</div>
   </div>
   <div class="cart-footer">
-    <button class="btn btn-primary" style="width:100%" onclick="closeCart(); goStep(4); buildSummary();" id="cart-checkout-btn" disabled>Request quote →</button>
+    <button class="btn btn-primary" style="width:100%;margin-bottom:10px" onclick="closeCart(); goStep(4); buildSummary();" id="cart-checkout-btn" disabled>Request quote →</button>
+    <button onclick="clearBag()" style="width:100%;padding:9px;background:none;border:1.5px solid #ddd;border-radius:6px;font-family:inherit;font-size:13px;color:#999;cursor:pointer;transition:all .15s" onmouseover="this.style.borderColor='#c8392b';this.style.color='#c8392b'" onmouseout="this.style.borderColor='#ddd';this.style.color='#999'">Clear bag</button>
   </div>
 </div>
 
@@ -958,9 +959,22 @@ function addToCart() {
 }
 
 function removeFromCart(id) {
-  cart = cart.filter(item => item.id !== id);
+  const item = cart.find(i => i.id === id);
+  const name = item ? (item.product.title || item.product.styleName || 'this item') : 'this item';
+  if (!confirm(`Remove "${name}" from your bag?`)) return;
+  cart = cart.filter(i => i.id !== id);
   saveCart();
   updateCartUI();
+  buildSummary();
+}
+
+function clearBag() {
+  if (!cart.length) return;
+  if (!confirm('Remove all items from your bag?')) return;
+  cart = [];
+  saveCart();
+  updateCartUI();
+  buildSummary();
 }
 
 function setCartService(id, svc, pillEl) {
@@ -1602,6 +1616,16 @@ function toggleSummaryPlacement(id, opt, pillEl) {
   if (bagWrap) bagWrap.innerHTML = buildPlacementHTML(item);
 }
 
+function removeSummaryItem(id) {
+  const item = cart.find(i => i.id === id);
+  const name = item ? (item.product.title || item.product.styleName || 'this item') : 'this item';
+  if (!confirm(`Remove "${name}" (${item?.color?.name || ''}) from your bag?`)) return;
+  cart = cart.filter(i => i.id !== id);
+  saveCart();
+  updateCartUI();
+  buildSummary();
+}
+
 function placementDisplay(item) {
   if (!item.placements || !item.placements.length) return '—';
   const parts = item.placements.map(p => {
@@ -1649,7 +1673,10 @@ function buildSummary() {
           <div class="placement-pills" style="margin:0">${buildSummaryPlacementPills(item)}</div>
           ${item.service==='Embroidery' && item.placements && item.placements.includes('Custom') ? `<input class="placement-custom visible" id="summary-custom-${item.id}" type="text" placeholder="Describe placement…" value="${item.customPlacement||''}" oninput="setCustomPlacement(${item.id},this.value)">` : ''}
         </div>
-        <div class="summary-row" style="margin-bottom:8px"><span class="label">Pieces</span><span class="val">${total}</span></div>`;
+        <div class="summary-row" style="margin-bottom:4px"><span class="label">Pieces</span><span class="val">${total}</span></div>
+        <div style="text-align:right;margin-bottom:10px">
+          <button onclick="removeSummaryItem(${item.id})" style="font-size:12px;color:#c8392b;background:none;border:none;cursor:pointer;font-family:inherit;padding:0;text-decoration:underline;text-underline-offset:2px">Remove item</button>
+        </div>`;
     });
   });
 
