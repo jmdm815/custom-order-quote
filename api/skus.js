@@ -1,5 +1,5 @@
 // api/skus.js
-// Vercel serverless function — proxies S&S SKU + inventory lookup to avoid CORS
+// Fetches SKUs + inventory for a given styleID from S&S API
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,29 +12,40 @@ export default async function handler(req, res) {
 
   const username = process.env.SS_USERNAME;
   const apiKey   = process.env.SS_API_KEY;
+  if (!username || !apiKey) return res.status(500).json({ error: 'S&S credentials not configured.' });
 
-  if (!username || !apiKey) {
-    return res.status(500).json({ error: 'S&S credentials not configured in Vercel environment variables.' });
-  }
+  const auth = { headers: {
+    'Authorization': 'Basic ' + Buffer.from(`${username}:${apiKey}`).toString('base64'),
+    'Accept': 'application/json',
+  }};
 
   try {
-    const response = await fetch(
-      `https://api.ssactivewear.com/v2/skus?styleID=${encodeURIComponent(styleID)}`,
-      {
-        headers: {
-          'Authorization': 'Basic ' + Buffer.from(`${username}:${apiKey}`).toString('base64'),
-          'Accept': 'application/json',
-        }
-      }
-    );
+    // Fetch SKUs and inventory in parallel
+    const [skuRes, invRes] = await Promise.all([
+      fetch(`https://api.ssactivewear.com/v2/products?styleID=${encodeURIComponent(styleID)}`, auth),
+      fetch(`https://api.ssactivewear.com/v2/inventory?styleID=${encodeURIComponent(styleID)}`, auth),
+    ]);
 
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(response.status).json({ error: `S&S API error: ${response.status}`, detail: text });
-    }
+    const skus = skuRes.ok ? await skuRes.json() : [];
+    const inv  = invRes.ok ? await invRes.json() : [];
 
-    const data = await response.json();
-    return res.status(200).json(data);
+    // Build inventory lookup: sku -> qty
+    const invMap = {};
+    (Array.isArray(inv) ? inv : []).forEach(i => {
+      invMap[i.sku] = (invMap[i.sku] || 0) + (i.qty || i.quantity || 0);
+    });
+
+    // Merge inventory into skus and normalize image URLs
+    const base = 'https://images.ssactivewear.com/';
+    const merged = (Array.isArray(skus) ? skus : []).map(s => ({
+      ...s,
+      quantityAvailable: invMap[s.sku] || 0,
+      colorFrontImage:   s.colorFrontImage   ? base + s.colorFrontImage   : '',
+      colorSwatchImage:  s.colorSwatchImage  ? base + s.colorSwatchImage  : '',
+      colorBackImage:    s.colorBackImage    ? base + s.colorBackImage    : '',
+    }));
+
+    return res.status(200).json(merged);
   } catch (err) {
     return res.status(500).json({ error: 'Failed to reach S&S API', detail: err.message });
   }
