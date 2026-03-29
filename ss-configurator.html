@@ -557,6 +557,7 @@
 //  CONFIGURATION — update these before launch
 // ─────────────────────────────────────────────
 const SS_API_KEY  = "YOUR_SS_API_KEY_HERE";   // Your S&S Activewear API key
+const SS_USERNAME = "YOUR_SS_USERNAME_HERE";  // Your S&S Activewear username
 const YOUR_EMAIL  = "YOUR_EMAIL@YOURDOMAIN.COM"; // Where quote emails go
 
 // EmailJS (free tier handles ~200 emails/month — sign up at emailjs.com)
@@ -611,7 +612,7 @@ async function searchProducts() {
     // S&S API: search styles
     const res = await fetch(`${SS_BASE}/styles?contains=${encodeURIComponent(q)}&limit=24`, {
       headers: {
-        'Authorization': 'Basic ' + btoa(SS_API_KEY + ':'),
+        'Authorization': 'Basic ' + btoa(SS_USERNAME + ':' + SS_API_KEY),
         'Accept': 'application/json'
       }
     });
@@ -677,7 +678,7 @@ async function loadProductDetail(p) {
   try {
     const res = await fetch(`${SS_BASE}/skus?styleID=${styleId}`, {
       headers: {
-        'Authorization': 'Basic ' + btoa(SS_API_KEY + ':'),
+        'Authorization': 'Basic ' + btoa(SS_USERNAME + ':' + SS_API_KEY),
         'Accept': 'application/json'
       }
     });
