@@ -1,5 +1,5 @@
 // api/category.js
-// Returns styles filtered by baseCategory name
+// Returns styles matching a search term (used for both categories and subcategories)
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -14,7 +14,6 @@ export default async function handler(req, res) {
   if (!username || !apiKey) return res.status(500).json({ error: 'S&S credentials not configured.' });
 
   try {
-    // S&S styles endpoint supports filtering by baseCategory via search
     const response = await fetch(
       `https://api.ssactivewear.com/v2/styles?search=${encodeURIComponent(name)}&mediatype=json`,
       {
@@ -33,16 +32,13 @@ export default async function handler(req, res) {
     const data = await response.json();
     const base = 'https://www.ssactivewear.com/';
 
-    // Filter to only styles whose baseCategory matches (search can be broad)
-    const filtered = (Array.isArray(data) ? data : [])
-      .filter(s => s.baseCategory && s.baseCategory.toLowerCase().includes(name.toLowerCase()))
-      .map(s => ({
-        ...s,
-        styleImage: s.styleImage ? base + s.styleImage : '',
-        brandImage: s.brandImage ? base + s.brandImage : '',
-      }));
+    const styles = (Array.isArray(data) ? data : []).map(s => ({
+      ...s,
+      styleImage: s.styleImage ? base + s.styleImage : '',
+      brandImage: s.brandImage ? base + s.brandImage : '',
+    }));
 
-    return res.status(200).json(filtered);
+    return res.status(200).json(styles);
   } catch (err) {
     return res.status(500).json({ error: 'Failed to reach S&S API', detail: err.message });
   }
