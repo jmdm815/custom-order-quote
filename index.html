@@ -534,14 +534,7 @@
   <div class="panel active" id="panel-1">
     <p class="panel-title">Find your product</p>
     <p class="panel-sub">Search our catalog by style number, brand, or keyword.</p>
-
-    <div class="notice" id="demo-notice">
-      <strong>Developer setup needed:</strong> Replace <code>YOUR_SS_API_KEY_HERE</code> at the top of this file with your real S&amp;S API key. 
-      The search below runs against the live S&amp;S REST API at <code>api.ssactivewear.com/v2</code>. 
-      <a href="#" onclick="loadDemoProducts(); return false;">Load demo data instead →</a>
-    </div>
-
-    <div class="cat-bar" id="cat-bar">
+<div class="cat-bar" id="cat-bar">
       <button class="cat-btn active" onclick="selectMainCat('', this)">All</button>
       <button class="cat-btn" onclick="selectMainCat('T-Shirts', this)">T-Shirts</button>
       <button class="cat-btn" onclick="selectMainCat('Polos', this)">Polos</button>
@@ -1204,7 +1197,7 @@ function resetApp() {
 //  DEMO DATA (used when API key not yet set)
 // ─────────────────────────────────────────────
 function loadDemoProducts() {
-  document.getElementById('demo-notice').style.display = 'none';
+  
   const demos = [
     { StyleID:'PC61', Title:'Essential Tee', BrandName:'Port & Company', Image:'https://images.ssactivewear.com/im/1-0-0/500/PC61_FRONT.jpg' },
     { StyleID:'G500', Title:'Heavy Cotton Tee', BrandName:'Gildan', Image:'https://images.ssactivewear.com/im/1-0-0/500/G500_FRONT.jpg' },
