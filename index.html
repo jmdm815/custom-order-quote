@@ -346,6 +346,26 @@
   .detail-info h2 { font-family: var(--font-display); font-size: 24px; font-weight: 400; margin-bottom: 4px; }
   .detail-info .style-num { font-size: 13px; color: var(--ink3); margin-bottom: 20px; }
 
+  /* ── PRODUCT DESCRIPTION ── */
+  .product-desc {
+    margin-top: 16px;
+  }
+  .product-desc-label {
+    font-size: 11px; font-weight: 500; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--ink3); margin-bottom: 8px;
+  }
+  .product-desc ul {
+    list-style: none; padding: 0; margin: 0;
+  }
+  .product-desc ul li {
+    font-size: 13px; color: var(--ink2); padding: 3px 0 3px 16px;
+    position: relative; line-height: 1.5;
+  }
+  .product-desc ul li::before {
+    content: '·'; position: absolute; left: 4px; color: var(--ink3); font-weight: 700;
+  }
+  .product-desc .desc-loading { font-size: 13px; color: var(--ink3); }
+
   /* ── SIZE QTY TABLE ── */
   .size-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
   .size-table th {
@@ -698,6 +718,10 @@
           <span class="no-img">No image</span>
         </div>
         <div class="thumb-strip" id="thumb-strip"></div>
+        <div class="product-desc" id="product-desc" style="display:none">
+          <div class="product-desc-label">Product details</div>
+          <ul id="product-desc-list"></ul>
+        </div>
       </div>
       <div class="detail-info">
         <div class="brand" id="d-brand"></div>
@@ -1288,6 +1312,27 @@ async function selectProduct(p, cardEl) {
 // ─────────────────────────────────────────────
 //  STEP 2 — COLOR & QTY
 // ─────────────────────────────────────────────
+async function loadDescription(styleId) {
+  const wrap = document.getElementById('product-desc');
+  const list = document.getElementById('product-desc-list');
+  if (!wrap || !list) return;
+  wrap.style.display = 'block';
+  list.innerHTML = '<li class="desc-loading">Loading details…</li>';
+
+  try {
+    const res = await fetch(`/api/description?styleID=${encodeURIComponent(styleId)}`);
+    if (!res.ok) throw new Error();
+    const { bullets } = await res.json();
+    if (!bullets || !bullets.length) {
+      wrap.style.display = 'none';
+      return;
+    }
+    list.innerHTML = bullets.map(b => `<li>${b}</li>`).join('');
+  } catch(e) {
+    wrap.style.display = 'none';
+  }
+}
+
 async function loadProductDetail(p) {
   // Use numeric styleID for SKU/inventory lookup (p.styleID is the integer, p.styleName is e.g. "2000")
   const styleId = p.styleID || p.StyleID || '';
@@ -1297,6 +1342,9 @@ async function loadProductDetail(p) {
   document.getElementById('d-brand').textContent = p.brandName || p.BrandName || '';
   document.getElementById('d-name').textContent  = p.title || p.Title || p.styleName || 'Product';
   document.getElementById('d-style').textContent = `Style# ${p.styleName || styleId}`;
+
+  // Load product description
+  loadDescription(styleId);
 
   // Fetch SKUs (colors + sizes + inventory)
   try {
