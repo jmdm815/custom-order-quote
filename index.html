@@ -815,6 +815,7 @@ let state = {
 };
 // Cart: array of { id, product, color, sizes, service, placements, customPlacement, image }
 let cart = [];
+let _lastProducts = []; // sort state — declared here so it's always available
 
 function saveCart() {
   try { localStorage.setItem('jm_bag', JSON.stringify(cart)); } catch(e) {}
@@ -827,9 +828,7 @@ function loadCart() {
   } catch(e) { cart = []; }
 }
 
-// Load cart on page start
-loadCart();
-updateCartUI();
+// Initialization runs at bottom of script after all functions are defined
 
 // ─────────────────────────────────────────────
 //  STEP NAV
@@ -1189,7 +1188,7 @@ async function searchProducts() {
 }
 
 // Sort state
-let _lastProducts = [];
+// (_lastProducts declared at top)
 
 function applySortAndRender() {
   const sort = document.getElementById('sort-select').value;
@@ -1683,6 +1682,15 @@ function demoSkus(styleId) {
 
 // Allow forward navigation from next buttons
 const origGoStep = goStep;
+
+// ── INIT — runs after all functions are defined ──
+(function init() {
+  loadCart();
+  // Strip any cart items that are missing critical data (corrupted saves)
+  cart = cart.filter(item => item && item.product && item.color && Array.isArray(item.sizes) && item.sizes.length > 0);
+  saveCart();
+  updateCartUI();
+})();
 </script>
 
 <!-- Optional: load EmailJS if you use Option A above -->
