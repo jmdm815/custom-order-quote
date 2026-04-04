@@ -3,19 +3,19 @@ export default async function handler(req, res) {
   const user = process.env.SANMAR_USERNAME;
   const pass = process.env.SANMAR_PASSWORD;
 
-  // Try PromoStandards Product Data Service v1
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/">
+                  xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
+                  xmlns:shared="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/SharedObjects/">
   <soapenv:Header/>
   <soapenv:Body>
     <ns:GetProductRequest>
-      <ns:wsVersion>1.0.0</ns:wsVersion>
-      <ns:id>${user}</ns:id>
-      <ns:password>${pass}</ns:password>
-      <ns:localizationCountry>US</ns:localizationCountry>
-      <ns:localizationLanguage>en</ns:localizationLanguage>
-      <ns:productId>PC61</ns:productId>
+      <shared:wsVersion>1.0.0</shared:wsVersion>
+      <shared:id>${user}</shared:id>
+      <shared:password>${pass}</shared:password>
+      <shared:localizationCountry>US</shared:localizationCountry>
+      <shared:localizationLanguage>en</shared:localizationLanguage>
+      <shared:productId>PC61</shared:productId>
     </ns:GetProductRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
