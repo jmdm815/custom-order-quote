@@ -1,24 +1,22 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  const acct = process.env.SANMAR_ACCOUNT;
   const user = process.env.SANMAR_USERNAME;
   const pass = process.env.SANMAR_PASSWORD;
 
-  // The SanMarWebServicePort only has inventory methods.
-  // Product info uses a different endpoint. Let's try it:
-  // Method: getInventoryQtyForStyleColorSize
-  // args: username, password, style, color, size, sanmarUserRegNum
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:web="http://webservice.integration.sanmar.com/">
   <soapenv:Header/>
   <soapenv:Body>
     <web:getInventoryQtyForStyleColorSize>
-      <arg0>${user}</arg0>
-      <arg1>${pass}</arg1>
-      <arg2>PC61</arg2>
-      <arg3>Black</arg3>
-      <arg4>M</arg4>
-      <arg5></arg5>
+      <arg0>${acct}</arg0>
+      <arg1>${user}</arg1>
+      <arg2>${pass}</arg2>
+      <arg3>PC61</arg3>
+      <arg4>Black</arg4>
+      <arg5>M</arg5>
+      <arg6></arg6>
     </web:getInventoryQtyForStyleColorSize>
   </soapenv:Body>
 </soapenv:Envelope>`;
@@ -30,7 +28,11 @@ export default async function handler(req, res) {
       body: soap,
     });
     const xml = await r.text();
-    res.status(200).json({ status: r.status, preview: xml.substring(0, 4000) });
+    res.status(200).json({
+      creds: { acct: acct ? acct.substring(0,3)+'***' : 'MISSING', user: user ? user.substring(0,3)+'***' : 'MISSING', pass: pass ? 'SET' : 'MISSING' },
+      status: r.status,
+      preview: xml.substring(0, 3000)
+    });
   } catch(err) {
     res.status(500).json({ error: err.message });
   }
