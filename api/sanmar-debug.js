@@ -6,20 +6,40 @@ export default async function handler(req, res) {
 
   const results = {};
 
-  // Get full product info WSDL to see method names
-  try {
-    const r = await fetch('https://ws.sanmar.com:8080/SanMarWebService/SanMarProductInfoServicePort?wsdl');
-    const txt = await r.text();
-    // Extract operation names
-    const ops = [...txt.matchAll(/operation name="([^"]+)"/g)].map(m => m[1]);
-    results.operations = ops;
-    results.wsdlPreview = txt.substring(0, 3000);
-  } catch(e) {
-    results.error = e.message;
-  }
+  // Test 1: sanmarCustomerNumber, username, password order
+  const soap1 = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:web="http://impl.webservice.integration.sanmar.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <web:getProductInfoByStyleColorSize>
+      <arg0>
+        <sanmarCustomerNumber>${acct}</sanmarCustomerNumber>
+        <username>${user}</username>
+        <password>${pass}</password>
+        <sanmarUserRegistrationNumber></sanmarUserRegistrationNumber>
+      </arg0>
+      <arg1>
+        <style>PC61</style>
+        <color></color>
+        <size></size>
+      </arg1>
+    </web:getProductInfoByStyleColorSize>
+  </soapenv:Body>
+</soapenv:Envelope>`;
 
-  // Also test a call with the product info endpoint using namespace from WSDL
-  const soap = `<?xml version="1.0" encoding="UTF-8"?>
+  try {
+    const r = await fetch('https://ws.sanmar.com:8080/SanMarWebService/SanMarProductInfoServicePort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
+      body: soap1,
+    });
+    const xml = await r.text();
+    results.test1_structured = xml.substring(0, 3000);
+  } catch(e) { results.test1_error = e.message; }
+
+  // Test 2: flat args — acct, user, pass, style, color, size, regnum
+  const soap2 = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:web="http://impl.webservice.integration.sanmar.com/">
   <soapenv:Header/>
@@ -40,14 +60,11 @@ export default async function handler(req, res) {
     const r2 = await fetch('https://ws.sanmar.com:8080/SanMarWebService/SanMarProductInfoServicePort', {
       method: 'POST',
       headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
-      body: soap,
+      body: soap2,
     });
-    const xml = await r2.text();
-    results.productCallStatus = r2.status;
-    results.productCallPreview = xml.substring(0, 4000);
-  } catch(e) {
-    results.productCallError = e.message;
-  }
+    const xml2 = await r2.text();
+    results.test2_flat = xml2.substring(0, 3000);
+  } catch(e) { results.test2_error = e.message; }
 
   res.status(200).json(results);
 }
