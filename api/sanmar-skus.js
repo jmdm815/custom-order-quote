@@ -57,19 +57,20 @@ export default async function handler(req, res) {
 
       if (!colorName || !size) return;
 
-      // Build image URLs using SanMar CDN
-      // SanMar images follow pattern: https://www.sanmar.com/medias/mcs/{STYLE}_{COLOR_CODE}_FM.jpg
-      // We'll use the partId-based URL which is more reliable
-      const frontImg = `https://www.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorName.replace(/\s+/g,'_').replace(/\//g,'_')}_FM.jpg`;
-      const swatchImg = `https://www.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorName.replace(/\s+/g,'_').replace(/\//g,'_')}_SS.jpg`;
+      // SanMar CDN base: cdnm.sanmar.com
+      const colorSlug = colorName.replace(/\s+/g,'_').replace(/\//g,'_').replace(/&/g,'and');
+      const frontImg  = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_FM.jpg`;
+      const backImg   = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_BM.jpg`;
+      const sideImg   = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_SM.jpg`;
+      const swatchImg = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_SS.jpg`;
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
           color1: pmsToHex(pms) || '#888888',
           colorFrontImage:  frontImg,
-          colorBackImage:   frontImg.replace('_FM', '_BM'),
-          colorSideImage:   frontImg.replace('_FM', '_SM'),
+          colorBackImage:   backImg,
+          colorSideImage:   sideImg,
           colorSwatchImage: swatchImg,
           colorOnModelFrontImage: '',
           colorOnModelSideImage: '',
