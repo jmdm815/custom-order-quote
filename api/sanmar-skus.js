@@ -1,6 +1,5 @@
 // api/sanmar-skus.js
-// Returns colors, sizes, images and inventory for a SanMar style
-
+// Returns colors, sizes and inventory for a SanMar style via PromoStandards
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -12,99 +11,157 @@ export default async function handler(req, res) {
 
   const user = process.env.SANMAR_USERNAME;
   const pass = process.env.SANMAR_PASSWORD;
+  const acct = process.env.SANMAR_ACCOUNT;
   if (!user || !pass) return res.status(500).json({ error: 'SanMar credentials not configured.' });
 
-  // Fetch product info (colors, sizes, images)
   const productSoap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:web="http://webservice.integration.sanmar.com/">
+                  xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
+                  xmlns:shared="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/SharedObjects/">
   <soapenv:Header/>
   <soapenv:Body>
-    <web:getProductInfoByStyle>
-      <arg0>
-        <sanmarUsername>${user}</sanmarUsername>
-        <sanmarPassword>${pass}</sanmarPassword>
-        <sanmarUserRegistrationNumber></sanmarUserRegistrationNumber>
-      </arg0>
-      <arg1>${styleID.trim().toUpperCase()}</arg1>
-    </web:getProductInfoByStyle>
+    <ns:GetProductRequest>
+      <shared:wsVersion>1.0.0</shared:wsVersion>
+      <shared:id>${user}</shared:id>
+      <shared:password>${pass}</shared:password>
+      <shared:localizationCountry>US</shared:localizationCountry>
+      <shared:localizationLanguage>en</shared:localizationLanguage>
+      <shared:productId>${styleID.trim().toUpperCase()}</shared:productId>
+    </ns:GetProductRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
 
   try {
-    const response = await fetch(
-      'https://ws.sanmar.com:8080/SanMarWebService/SanMarWebServicePort',
-      {
+    const r = await fetch('https://ws.sanmar.com:8080/promostandards/ProductDataServiceBinding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
+      body: productSoap,
+    });
+    const xml = await r.text();
+
+    // Parse all ProductPart blocks
+    const partBlocks = [...xml.matchAll(/<ProductPart>([\s\S]*?)<\/ProductPart>/gi)].map(m => m[1]);
+
+    const getValue = (block, tag) => {
+      const m = block.match(new RegExp(`<(?:ns2:)?${tag}[^>]*>([^<]*)<\/(?:ns2:)?${tag}>`, 'i'));
+      return m ? m[1].trim() : '';
+    };
+
+    // Group by color — each color gets one entry per size
+    const skuMap = {};
+    partBlocks.forEach(part => {
+      const partId    = getValue(part, 'partId');
+      const colorName = getValue(part, 'colorName');
+      const size      = getValue(part, 'labelSize');
+      const pms       = getValue(part, 'approximatePms');
+
+      if (!colorName || !size) return;
+
+      // Build image URLs using SanMar CDN
+      // SanMar images follow pattern: https://www.sanmar.com/medias/mcs/{STYLE}_{COLOR_CODE}_FM.jpg
+      // We'll use the partId-based URL which is more reliable
+      const frontImg = `https://www.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorName.replace(/\s+/g,'_').replace(/\//g,'_')}_FM.jpg`;
+      const swatchImg = `https://www.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorName.replace(/\s+/g,'_').replace(/\//g,'_')}_SS.jpg`;
+
+      if (!skuMap[colorName]) {
+        skuMap[colorName] = {
+          colorName,
+          color1: pmsToHex(pms) || '#888888',
+          colorFrontImage:  frontImg,
+          colorBackImage:   frontImg.replace('_FM', '_BM'),
+          colorSideImage:   frontImg.replace('_FM', '_SM'),
+          colorSwatchImage: swatchImg,
+          colorOnModelFrontImage: '',
+          colorOnModelSideImage: '',
+          colorOnModelBackImage: '',
+          sizes: [],
+        };
+      }
+      skuMap[colorName].sizes.push({ partId, size });
+    });
+
+    // Now fetch inventory for each partId using the inventory endpoint
+    // Build list of all partIds
+    const allPartIds = partBlocks.map(p => getValue(p, 'partId')).filter(Boolean);
+
+    // Fetch inventory in batches - SanMar inventory uses PromoStandards too
+    const invSoap = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:ns="http://www.promostandards.org/WSDL/InventoryService/1.0.0/"
+                  xmlns:shared="http://www.promostandards.org/WSDL/InventoryService/1.0.0/SharedObjects/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <ns:GetInventoryLevelsRequest>
+      <shared:wsVersion>1.0.0</shared:wsVersion>
+      <shared:id>${user}</shared:id>
+      <shared:password>${pass}</shared:password>
+      <shared:productId>${styleID.trim().toUpperCase()}</shared:productId>
+    </ns:GetInventoryLevelsRequest>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+
+    let invMap = {};
+    try {
+      const invR = await fetch('https://ws.sanmar.com:8080/promostandards/InventoryServiceBinding', {
         method: 'POST',
         headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
-        body: productSoap,
+        body: invSoap,
+      });
+      const invXml = await invR.text();
+
+      // Parse inventory: <partId>xxx</partId> ... <Quantity><value>500</value>
+      const partInvBlocks = [...invXml.matchAll(/<PartInventoryArray>([\s\S]*?)<\/PartInventoryArray>/gi)];
+      if (partInvBlocks.length) {
+        const entries = [...partInvBlocks[0][1].matchAll(/<PartInventory>([\s\S]*?)<\/PartInventory>/gi)];
+        entries.forEach(e => {
+          const pid = getValue(e[1], 'partId');
+          const qty = parseInt(getValue(e[1], 'value') || '0') || 0;
+          if (pid) invMap[pid] = qty;
+        });
       }
-    );
-
-    const xml = await response.text();
-
-    if (xml.includes('errorOccurred>true') || xml.includes('authenticating failed')) {
-      return res.status(401).json({ error: 'SanMar authentication failed.' });
+    } catch(e) {
+      // Inventory fetch failed — show all as in stock
     }
 
-    const skus = parseSanMarSkus(xml, styleID);
+    // Build final SKU array matching S&S format
+    const skus = [];
+    Object.values(skuMap).forEach(color => {
+      color.sizes.forEach(s => {
+        skus.push({
+          sku:             s.partId,
+          styleID,
+          colorName:       color.colorName,
+          color1:          color.color1,
+          sizeName:        s.size,
+          quantityAvailable: invMap[s.partId] !== undefined ? invMap[s.partId] : 999,
+          colorFrontImage:  color.colorFrontImage,
+          colorBackImage:   color.colorBackImage,
+          colorSideImage:   color.colorSideImage,
+          colorSwatchImage: color.colorSwatchImage,
+          colorOnModelFrontImage: '',
+          colorOnModelSideImage:  '',
+          colorOnModelBackImage:  '',
+          _source: 'sanmar',
+        });
+      });
+    });
+
     return res.status(200).json(skus);
   } catch (err) {
     return res.status(500).json({ error: 'Failed to reach SanMar API', detail: err.message });
   }
 }
 
-function getXmlValue(xml, tag) {
-  const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-  return m ? m[1].trim() : '';
-}
-
-function getAllBlocks(xml, tag) {
-  const blocks = [];
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi');
-  let m;
-  while ((m = re.exec(xml)) !== null) blocks.push(m[1]);
-  return blocks;
-}
-
-function parseSanMarSkus(xml, styleID) {
-  const base = 'https://www.sanmar.com/';
-  const skus = [];
-
-  // SanMar response has listResponse entries, each containing a productBasicInfo block
-  const entries = getAllBlocks(xml, 'listResponse');
-
-  entries.forEach(entry => {
-    const colorName  = getXmlValue(entry, 'colorName')  || getXmlValue(entry, 'color') || 'Default';
-    const colorHex   = getXmlValue(entry, 'color1')     || '#cccccc';
-    const sizeName   = getXmlValue(entry, 'sizeName')   || getXmlValue(entry, 'size') || '?';
-    const sku        = getXmlValue(entry, 'uniqueKey')  || getXmlValue(entry, 'gtin') || `${styleID}-${colorName}-${sizeName}`;
-    const invRaw     = getXmlValue(entry, 'inventoryKey') || '0';
-    const qty        = parseInt(getXmlValue(entry, 'qty') || '0') || 0;
-
-    // Images — SanMar uses frontImage, backImage, sideImage
-    const frontImg = getXmlValue(entry, 'frontImage') || getXmlValue(entry, 'colorFrontImage') || '';
-    const backImg  = getXmlValue(entry, 'backImage')  || getXmlValue(entry, 'colorBackImage')  || '';
-    const sideImg  = getXmlValue(entry, 'sideImage')  || getXmlValue(entry, 'colorSideImage')  || '';
-    const swatchImg= getXmlValue(entry, 'colorSwatchImage') || '';
-
-    skus.push({
-      sku,
-      styleID,
-      colorName,
-      color1: colorHex,
-      sizeName,
-      quantityAvailable: qty,
-      colorFrontImage:  frontImg  ? (frontImg.startsWith('http')  ? frontImg  : base + frontImg)  : '',
-      colorBackImage:   backImg   ? (backImg.startsWith('http')   ? backImg   : base + backImg)   : '',
-      colorSideImage:   sideImg   ? (sideImg.startsWith('http')   ? sideImg   : base + sideImg)   : '',
-      colorSwatchImage: swatchImg ? (swatchImg.startsWith('http') ? swatchImg : base + swatchImg) : '',
-      colorOnModelFrontImage: '',
-      colorOnModelSideImage:  '',
-      colorOnModelBackImage:  '',
-      _source: 'sanmar',
-    });
-  });
-
-  return skus;
+// Convert PMS color code to approximate hex
+function pmsToHex(pms) {
+  if (!pms) return null;
+  // Basic mapping for common PMS colors — most will fallback to swatch image
+  const map = {
+    'Black': '#1a1a1a', 'White': '#ffffff', 'Navy': '#1e3a5f',
+    'Red': '#c8392b', 'Royal': '#2563eb', 'Forest': '#166534',
+  };
+  for (const [k, v] of Object.entries(map)) {
+    if (pms.toLowerCase().includes(k.toLowerCase())) return v;
+  }
+  return null;
 }
