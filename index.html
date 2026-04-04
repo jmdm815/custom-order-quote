@@ -1517,9 +1517,7 @@ async function loadProductDetail(p) {
     const list  = document.getElementById('product-desc-list');
     if (wrap && list && p.description) {
       wrap.style.display = 'block';
-      const bullets = p.description.replace(/<[^>]+>/g, '
-').split(/
-+/).map(l => l.trim()).filter(l => l.length > 8);
+      const bullets = p.description.replace(/<[^>]+>/g, ' ').split(/\s{2,}/).map(l => l.trim()).filter(l => l.length > 8);
       list.innerHTML = bullets.map(b => `<li>${b}</li>`).join('');
     } else if (wrap) { wrap.style.display = 'none'; }
   }
