@@ -1,7 +1,5 @@
 // api/sanmar-search.js
-// Search SanMar products by style number using their SOAP API
-// SanMar's API doesn't support keyword search — customers must enter a style number
-
+// Search SanMar via PromoStandards Product Data Service
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -15,86 +13,66 @@ export default async function handler(req, res) {
   const pass = process.env.SANMAR_PASSWORD;
   if (!user || !pass) return res.status(500).json({ error: 'SanMar credentials not configured.' });
 
-  // SanMar SOAP — getProductInfoByStyle returns all colors/sizes for a style
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:web="http://webservice.integration.sanmar.com/">
+                  xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
+                  xmlns:shared="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/SharedObjects/">
   <soapenv:Header/>
   <soapenv:Body>
-    <web:getProductInfoByStyle>
-      <arg0>
-        <sanmarUsername>${user}</sanmarUsername>
-        <sanmarPassword>${pass}</sanmarPassword>
-        <sanmarUserRegistrationNumber></sanmarUserRegistrationNumber>
-      </arg0>
-      <arg1>${style.trim().toUpperCase()}</arg1>
-    </web:getProductInfoByStyle>
+    <ns:GetProductRequest>
+      <shared:wsVersion>1.0.0</shared:wsVersion>
+      <shared:id>${user}</shared:id>
+      <shared:password>${pass}</shared:password>
+      <shared:localizationCountry>US</shared:localizationCountry>
+      <shared:localizationLanguage>en</shared:localizationLanguage>
+      <shared:productId>${style.trim().toUpperCase()}</shared:productId>
+    </ns:GetProductRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
 
   try {
-    const response = await fetch(
-      'https://ws.sanmar.com:8080/SanMarWebService/SanMarWebServicePort',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/xml;charset=UTF-8',
-          'SOAPAction': '""',
-        },
-        body: soap,
-      }
-    );
-
+    const response = await fetch('https://ws.sanmar.com:8080/promostandards/ProductDataServiceBinding', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
+      body: soap,
+    });
     const xml = await response.text();
 
-    // Check for auth error
-    if (xml.includes('errorOccurred>true') || xml.includes('authenticating failed')) {
-      return res.status(401).json({ error: 'SanMar authentication failed. Check credentials.' });
+    if (xml.includes('faultstring') || xml.includes('errorCode')) {
+      return res.status(404).json({ error: `Style ${style} not found in SanMar catalog.` });
     }
 
-    // Parse the XML response into a usable product object
-    const product = parseSanMarProductXML(xml, style);
-    if (!product) return res.status(404).json({ error: `Style ${style} not found in SanMar catalog.` });
+    const getValue = (tag) => {
+      const m = xml.match(new RegExp(`<(?:ns2:)?${tag}[^>]*>([^<]*)<\/(?:ns2:)?${tag}>`, 'i'));
+      return m ? m[1].trim() : '';
+    };
 
-    return res.status(200).json([product]); // return as array to match S&S format
+    const productId    = getValue('productId') || style.toUpperCase();
+    const productName  = getValue('productName') || style.toUpperCase();
+    const brand        = getValue('productBrand') || 'SanMar';
+    const descriptions = [...xml.matchAll(/<ns2:description[^>]*>([^<]+)<\/ns2:description>/gi)].map(m => m[1].trim()).filter(Boolean);
+    const category     = getValue('category') || '';
+
+    // Get unique colors from ProductPartArray
+    const colorNames = [...new Set([...xml.matchAll(/<colorName>([^<]+)<\/colorName>/gi)].map(m => m[1].trim()))];
+
+    // Build style image URL using SanMar CDN pattern
+    const styleImageUrl = `https://www.sanmar.com/medias/mcs/${productId}_FM.jpg`;
+
+    const product = {
+      styleID:      productId,
+      styleName:    productId,
+      title:        productName,
+      brandName:    brand,
+      baseCategory: category,
+      description:  descriptions.join(' | '),
+      styleImage:   styleImageUrl,
+      _colorNames:  colorNames,
+      _source:      'sanmar',
+    };
+
+    return res.status(200).json([product]);
   } catch (err) {
     return res.status(500).json({ error: 'Failed to reach SanMar API', detail: err.message });
   }
-}
-
-function getXmlValue(xml, tag) {
-  const m = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i'));
-  return m ? m[1].trim() : '';
-}
-
-function getAllXmlValues(xml, tag) {
-  const results = [];
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi');
-  let m;
-  while ((m = re.exec(xml)) !== null) results.push(m[1].trim());
-  return results;
-}
-
-function parseSanMarProductXML(xml, styleNum) {
-  // Extract first product entry to get style-level info
-  const title       = getXmlValue(xml, 'productTitle') || getXmlValue(xml, 'title') || styleNum;
-  const brand       = getXmlValue(xml, 'brandName') || 'SanMar';
-  const description = getXmlValue(xml, 'description') || '';
-  const styleImage  = getXmlValue(xml, 'styleImage') || getXmlValue(xml, 'frontImage') || '';
-
-  const imgUrl = styleImage
-    ? (styleImage.startsWith('http') ? styleImage : 'https://www.sanmar.com/' + styleImage)
-    : '';
-
-  return {
-    styleID:     styleNum.toUpperCase(),
-    styleName:   styleNum.toUpperCase(),
-    title,
-    brandName:   brand,
-    description,
-    styleImage:  imgUrl,
-    baseCategory: getXmlValue(xml, 'baseCategory') || getXmlValue(xml, 'categoryName') || '',
-    _source:     'sanmar',
-    _rawXml:     xml, // keep for SKU parsing
-  };
 }
