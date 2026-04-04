@@ -6,45 +6,47 @@ export default async function handler(req, res) {
 
   const results = {};
 
-  // Try the PromoStandards product info endpoint
-  const psProductSoap = `<?xml version="1.0" encoding="UTF-8"?>
+  // Get full product info WSDL to see method names
+  try {
+    const r = await fetch('https://ws.sanmar.com:8080/SanMarWebService/SanMarProductInfoServicePort?wsdl');
+    const txt = await r.text();
+    // Extract operation names
+    const ops = [...txt.matchAll(/operation name="([^"]+)"/g)].map(m => m[1]);
+    results.operations = ops;
+    results.wsdlPreview = txt.substring(0, 3000);
+  } catch(e) {
+    results.error = e.message;
+  }
+
+  // Also test a call with the product info endpoint using namespace from WSDL
+  const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/2.0.0/">
+                  xmlns:web="http://impl.webservice.integration.sanmar.com/">
   <soapenv:Header/>
   <soapenv:Body>
-    <ns:GetProductRequest>
-      <ns:wsVersion>2.0.0</ns:wsVersion>
-      <ns:id>${user}</ns:id>
-      <ns:password>${pass}</ns:password>
-      <ns:localizationCountry>US</ns:localizationCountry>
-      <ns:localizationLanguage>en</ns:localizationLanguage>
-      <ns:productId>PC61</ns:productId>
-      <ns:partId></ns:partId>
-      <ns:colorName></ns:colorName>
-      <ns:ApparelSizeArray></ns:ApparelSizeArray>
-    </ns:GetProductRequest>
+    <web:getProductInfoByStyleColorSize>
+      <arg0>${acct}</arg0>
+      <arg1>${user}</arg1>
+      <arg2>${pass}</arg2>
+      <arg3>PC61</arg3>
+      <arg4></arg4>
+      <arg5></arg5>
+      <arg6></arg6>
+    </web:getProductInfoByStyleColorSize>
   </soapenv:Body>
 </soapenv:Envelope>`;
 
   try {
-    const r = await fetch('https://ws.sanmar.com:8080/promostandards/ProductDataServiceBinding?wsdl', {
-      method: 'GET',
+    const r2 = await fetch('https://ws.sanmar.com:8080/SanMarWebService/SanMarProductInfoServicePort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
+      body: soap,
     });
-    results.productDataWsdlStatus = r.status;
-    const txt = await r.text();
-    results.productDataWsdlPreview = txt.substring(0, 500);
+    const xml = await r2.text();
+    results.productCallStatus = r2.status;
+    results.productCallPreview = xml.substring(0, 4000);
   } catch(e) {
-    results.productDataWsdlError = e.message;
-  }
-
-  // Also try fetching the product info service WSDL
-  try {
-    const r2 = await fetch('https://ws.sanmar.com:8080/SanMarWebService/SanMarProductInfoServicePort?wsdl');
-    results.productInfoWsdlStatus = r2.status;
-    const txt2 = await r2.text();
-    results.productInfoWsdlPreview = txt2.substring(0, 500);
-  } catch(e) {
-    results.productInfoWsdlError = e.message;
+    results.productCallError = e.message;
   }
 
   res.status(200).json(results);
