@@ -1323,19 +1323,25 @@ async function searchProducts() {
   document.getElementById('subcat-bar').classList.remove('visible');
   document.getElementById('subcat-bar').innerHTML = '';
   const el = document.getElementById('product-results');
-  el.innerHTML = '<div class="loading"><div class="spinner"></div>Searching S&amp;S catalog…</div>';
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Searching catalog…</div>';
 
   try {
-    // S&S API: search styles
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-    if (!res.ok) throw new Error(`API error ${res.status}`);
-    const data = await res.json();
-    renderProductGrid(Array.isArray(data) ? data : (data.Styles || data.styles || []));
+    // Search S&S and SanMar simultaneously
+    const [ssResult, sanmarResult] = await Promise.allSettled([
+      fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`/api/sanmar-search?style=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []).catch(() => []),
+    ]);
+
+    const ssProducts     = ssResult.status     === 'fulfilled' ? (Array.isArray(ssResult.value)     ? ssResult.value     : []) : [];
+    const sanmarProducts = sanmarResult.status  === 'fulfilled' ? (Array.isArray(sanmarResult.value) ? sanmarResult.value : []) : [];
+
+    ssProducts.forEach(p => p._source = 'ss');
+    sanmarProducts.forEach(p => p._source = 'sanmar');
+
+    const combined = [...ssProducts, ...sanmarProducts];
+    renderProductGrid(combined);
   } catch(e) {
-    el.innerHTML = `<div class="empty">
-      Could not reach S&amp;S API. <br><small style="color:#aaa">${e.message}</small><br><br>
-      <a href="#" onclick="loadDemoProducts(); return false;" style="color:var(--accent)">Load demo data instead →</a>
-    </div>`;
+    el.innerHTML = `<div class="empty">Could not reach catalog. <small style="color:#aaa">${e.message}</small></div>`;
   }
 }
 
