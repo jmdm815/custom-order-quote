@@ -140,6 +140,23 @@
     margin-bottom: 28px;
   }
 
+  /* ── SUPPLIER TOGGLE ── */
+  .supplier-toggle {
+    display: flex; gap: 8px; margin-bottom: 20px; align-items: center;
+  }
+  .supplier-toggle span {
+    font-size: 12px; color: var(--ink3); text-transform: uppercase;
+    letter-spacing: 0.06em; margin-right: 4px;
+  }
+  .supplier-btn {
+    padding: 7px 18px; border-radius: 20px;
+    border: 1.5px solid var(--paper3); background: var(--white);
+    font-family: var(--font-body); font-size: 13px; color: var(--ink2);
+    cursor: pointer; transition: all .15s;
+  }
+  .supplier-btn:hover { border-color: var(--ink2); }
+  .supplier-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); font-weight: 500; }
+
   /* ── CATEGORIES ── */
   .cat-bar {
     display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;
@@ -736,6 +753,9 @@
       <input type="text" id="search-input" placeholder="e.g. PC61, Gildan, performance polo…" onkeydown="if(event.key==='Enter') searchProducts()">
       <button class="search-btn" onclick="searchProducts()">Search</button>
     </div>
+    <div id="sanmar-notice" style="display:none;font-size:13px;color:var(--ink3);margin-top:-12px;margin-bottom:16px">
+      SanMar requires an exact style number (e.g. <strong>PC61</strong>, <strong>K500</strong>, <strong>C112</strong>). Categories are not available.
+    </div>
 
     <div class="sort-bar" id="sort-bar">
       <span>Sort by</span>
@@ -910,6 +930,7 @@ let state = {
 };
 // Cart: array of { id, product, color, sizes, service, placements, customPlacement, image }
 let cart = [];
+let activeSupplier = 'ss'; // 'ss' or 'sanmar'
 let _lastProducts = []; // sort state — declared here so it's always available
 
 function saveCart() {
@@ -1313,9 +1334,34 @@ async function browseCategory(name, btnEl) {
   browseSubCat(name, btnEl);
 }
 
+function setSupplier(supplier, btnEl) {
+  activeSupplier = supplier;
+  document.querySelectorAll('.supplier-btn').forEach(b => b.classList.remove('active'));
+  btnEl.classList.add('active');
+
+  const isSanmar = supplier === 'sanmar';
+  document.getElementById('sanmar-notice').style.display = isSanmar ? 'block' : 'none';
+  document.getElementById('cat-bar').style.display = isSanmar ? 'none' : 'flex';
+  document.getElementById('subcat-bar').classList.remove('visible');
+  document.getElementById('subcat-bar').innerHTML = '';
+  document.getElementById('sort-bar').classList.remove('visible');
+  document.getElementById('product-results').innerHTML = isSanmar
+    ? '<p class="empty">Enter a SanMar style number above and click Search.</p>'
+    : '<p class="empty">Search for a product or pick a category above.</p>';
+  document.getElementById('search-input').placeholder = isSanmar
+    ? 'Enter style number e.g. PC61, K500, C112…'
+    : 'e.g. PC61, Gildan, performance polo…';
+}
+
 async function searchProducts() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return;
+
+  if (activeSupplier === 'sanmar') {
+    await searchSanMar(q);
+    return;
+  }
+
   // Clear active category when doing a text search
   document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('subcat-bar').classList.remove('visible');
@@ -1350,6 +1396,23 @@ function applySortAndRender() {
   }
   // relevance = original API order
   renderProductGridRaw(sorted);
+}
+
+async function searchSanMar(style) {
+  const el = document.getElementById('product-results');
+  el.innerHTML = `<div class="loading"><div class="spinner"></div>Looking up ${style.toUpperCase()} in SanMar catalog…</div>`;
+
+  try {
+    const res = await fetch(`/api/sanmar-search?style=${encodeURIComponent(style)}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `API error ${res.status}`);
+    }
+    const data = await res.json();
+    renderProductGrid(Array.isArray(data) ? data : []);
+  } catch(e) {
+    el.innerHTML = `<div class="empty">Could not find style in SanMar catalog.<br><small style="color:#aaa">${e.message}</small></div>`;
+  }
 }
 
 function renderProductGrid(products) {
@@ -1446,16 +1509,29 @@ async function loadProductDetail(p) {
   document.getElementById('d-name').textContent  = p.title || p.Title || p.styleName || 'Product';
   document.getElementById('d-style').textContent = `Style# ${p.styleName || styleId}`;
 
-  // Load product description
-  loadDescription(styleId);
+  // Load product description (S&S only)
+  if (!p._source || p._source === 'ss') loadDescription(styleId);
+  else {
+    // For SanMar, show description from the product object if available
+    const wrap = document.getElementById('product-desc');
+    const list  = document.getElementById('product-desc-list');
+    if (wrap && list && p.description) {
+      wrap.style.display = 'block';
+      const bullets = p.description.replace(/<[^>]+>/g, '
+').split(/
++/).map(l => l.trim()).filter(l => l.length > 8);
+      list.innerHTML = bullets.map(b => `<li>${b}</li>`).join('');
+    } else if (wrap) { wrap.style.display = 'none'; }
+  }
 
-  // Fetch SKUs (colors + sizes + inventory)
+  // Fetch SKUs — route to correct supplier
   try {
-    const res = await fetch(`/api/skus?styleID=${encodeURIComponent(styleId)}`);
+    const isSanmar = p._source === 'sanmar' || activeSupplier === 'sanmar';
+    const endpoint = isSanmar ? `/api/sanmar-skus?styleID=${encodeURIComponent(styleId)}` : `/api/skus?styleID=${encodeURIComponent(styleId)}`;
+    const res = await fetch(endpoint);
     const skus = await res.json();
     buildColorGrid(Array.isArray(skus) ? skus : (skus.Skus || skus.skus || []));
   } catch(e) {
-    // Demo fallback
     buildColorGrid(demoSkus(styleId));
   }
 }
