@@ -82,12 +82,12 @@ export default async function handler(req, res) {
         .replace(/\s+/g, '_')
         .replace(/\//g, '_');
 
+      // SanMar CDN images — served directly (browser can load these)
       const cdnBase = 'https://cdnm.sanmar.com/catalog/images';
-      const proxy = (url) => `/api/sanmar-image?url=${encodeURIComponent(url)}`;
-      const frontImg  = proxy(`${cdnBase}/${style}_${colorSlug}_FM.jpg`);
-      const backImg   = proxy(`${cdnBase}/${style}_${colorSlug}_BM.jpg`);
-      const sideImg   = proxy(`${cdnBase}/${style}_${colorSlug}_SM.jpg`);
-      const swatchImg = proxy(`${cdnBase}/${style}_${colorSlug}_SS.jpg`);
+      const frontImg  = `${cdnBase}/${style}_${colorSlug}_FM.jpg`;
+      const backImg   = `${cdnBase}/${style}_${colorSlug}_BM.jpg`;
+      const sideImg   = `${cdnBase}/${style}_${colorSlug}_SM.jpg`;
+      const swatchImg = `${cdnBase}/${style}_${colorSlug}_SS.jpg`;
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
