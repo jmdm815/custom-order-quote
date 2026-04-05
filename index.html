@@ -1545,7 +1545,7 @@ function updateProductImage(color) {
 
   // Show first image as main
   function setMain(url, thumbEl) {
-    wrap.innerHTML = `<img src="${url}" alt="${color.name}">`;
+    wrap.innerHTML = `<img src="${url}" alt="${color.name}" onerror="this.parentElement.innerHTML='<span class=\'no-img\'>No image available</span>'" onload="if(this.naturalWidth<100||this.naturalHeight<100)this.parentElement.innerHTML='<span class=\'no-img\'>No image available</span>'">`;
     document.querySelectorAll('.thumb').forEach(t => t.classList.remove('active'));
     if (thumbEl) thumbEl.classList.add('active');
   }
@@ -1559,7 +1559,7 @@ function updateProductImage(color) {
       const wrap2 = document.createElement('div');
       const thumb = document.createElement('div');
       thumb.className = 'thumb' + (i === 0 ? ' active' : '');
-      thumb.innerHTML = `<img src="${v.url}" alt="${v.label}">`;
+      thumb.innerHTML = `<img src="${v.url}" alt="${v.label}" onerror="this.style.display='none'" onload="if(this.naturalWidth<100)this.style.display='none'">`;
       thumb.onclick = () => setMain(v.url, thumb);
       const lbl = document.createElement('div');
       lbl.className = 'thumb-label';
