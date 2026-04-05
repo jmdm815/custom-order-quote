@@ -87,7 +87,7 @@ export default async function handler(req, res) {
       const frontImg  = `${cdnBase}/${style}_${colorSlug}_FM.jpg`;
       const backImg   = `${cdnBase}/${style}_${colorSlug}_BM.jpg`;
       const sideImg   = `${cdnBase}/${style}_${colorSlug}_SM.jpg`;
-      const swatchImg = `${cdnBase}/${style}_${colorSlug}_SS.jpg`;
+      const swatchImg = ''; // SanMar CDN swatches are placeholders — use color name instead
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
