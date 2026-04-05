@@ -27,10 +27,49 @@ export default async function handler(req, res) {
   });
   const xml = await r.text();
 
-  // Show the ProductPartArray section to see exact tag names
-  const partStart = xml.indexOf('<ProductPartArray>');
-  const partEnd = xml.indexOf('</ProductPartArray>') + '</ProductPartArray>'.length;
-  const partSection = partStart > -1 ? xml.substring(partStart, Math.min(partStart + 2000, partEnd)) : 'NOT FOUND';
+  // The XML is 600KB — use indexOf instead of regex for reliability
+  const partBlocks = [];
+  let searchFrom = 0;
+  while (true) {
+    const start = xml.indexOf('<ProductPart>', searchFrom);
+    if (start === -1) break;
+    const end = xml.indexOf('</ProductPart>', start);
+    if (end === -1) break;
+    partBlocks.push(xml.substring(start + '<ProductPart>'.length, end));
+    searchFrom = end + '</ProductPart>'.length;
+  }
 
-  res.status(200).json({ partSection, xmlLength: xml.length });
+  // Parse first part
+  const firstPart = partBlocks[0] || '';
+  const getVal = (block, tag) => {
+    const i = block.indexOf(`<${tag}>`);
+    const i2 = block.indexOf(`<ns2:${tag}>`);
+    const actualTag = i > -1 ? tag : (i2 > -1 ? `ns2:${tag}` : null);
+    if (!actualTag) return '';
+    const start = block.indexOf(`<${actualTag}>`) + `<${actualTag}>`.length;
+    const end = block.indexOf(`</${actualTag}>`);
+    return start > 0 && end > start ? block.substring(start, end).trim() : '';
+  };
+
+  const colorNames = [...new Set(partBlocks.map(p => getVal(p, 'colorName')).filter(Boolean))];
+  const firstColor = colorNames[0] || '';
+  const colorSlug = firstColor.replace(/\s+/g,'_').replace(/\//g,'_').replace(/&amp;/gi,'and').replace(/&/g,'and');
+  const testUrl = `https://cdnm.sanmar.com/medias/mcs/PC61_${colorSlug}_FM.jpg`;
+
+  let imgStatus = 0;
+  try {
+    const ir = await fetch(testUrl, { method: 'HEAD' });
+    imgStatus = ir.status;
+  } catch(e) {}
+
+  res.status(200).json({
+    xmlLength: xml.length,
+    partBlockCount: partBlocks.length,
+    colorNames: colorNames.slice(0, 5),
+    firstColor,
+    colorSlug,
+    testUrl,
+    imgStatus,
+    firstPartPreview: firstPart.substring(0, 400),
+  });
 }
