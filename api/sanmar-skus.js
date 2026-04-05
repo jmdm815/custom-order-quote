@@ -82,8 +82,7 @@ export default async function handler(req, res) {
         .replace(/\s+/g, '_')
         .replace(/\//g, '_');
 
-      // SanMar CDN images — served directly (browser can load these)
-      // SanMar CDN images are not accessible externally — leave blank
+      // SanMar CDN images not accessible externally
       const frontImg  = '';
       const backImg   = '';
       const sideImg   = '';
