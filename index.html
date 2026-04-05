@@ -1453,8 +1453,9 @@ async function loadProductDetail(p) {
   console.log('Loading SKUs for styleID:', styleId, 'styleName:', p.styleName);
 
   // Populate basic info
-  document.getElementById('d-brand').textContent = p.brandName || p.BrandName || '';
-  document.getElementById('d-name').textContent  = p.title || p.Title || p.styleName || 'Product';
+  const _decodeHtml = s => (s||'').replace(/&amp;/gi,'&').replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&quot;/gi,'"').replace(/&#39;/gi,"'");
+  document.getElementById('d-brand').textContent = _decodeHtml(p.brandName || p.BrandName || '');
+  document.getElementById('d-name').textContent  = _decodeHtml(p.title || p.Title || p.styleName || 'Product');
   document.getElementById('d-style').textContent = `Style# ${p.styleName || styleId}`;
 
   // Load product description
@@ -1544,7 +1545,7 @@ function updateProductImage(color) {
 
   // Show first image as main
   function setMain(url, thumbEl) {
-    wrap.innerHTML = `<img src="${url}" alt="${color.name}">`;
+    wrap.innerHTML = `<img src="${url}" alt="${color.name}" referrerpolicy="no-referrer" crossorigin="anonymous">`;
     document.querySelectorAll('.thumb').forEach(t => t.classList.remove('active'));
     if (thumbEl) thumbEl.classList.add('active');
   }
@@ -1558,7 +1559,7 @@ function updateProductImage(color) {
       const wrap2 = document.createElement('div');
       const thumb = document.createElement('div');
       thumb.className = 'thumb' + (i === 0 ? ' active' : '');
-      thumb.innerHTML = `<img src="${v.url}" alt="${v.label}">`;
+      thumb.innerHTML = `<img src="${v.url}" alt="${v.label}" referrerpolicy="no-referrer" crossorigin="anonymous">`;
       thumb.onclick = () => setMain(v.url, thumb);
       const lbl = document.createElement('div');
       lbl.className = 'thumb-label';
