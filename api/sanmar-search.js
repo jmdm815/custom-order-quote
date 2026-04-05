@@ -50,7 +50,19 @@ export default async function handler(req, res) {
     const productId    = getValue('productId') || style.toUpperCase();
     const productName  = getValue('productName') || style.toUpperCase();
     const brand        = getValue('productBrand') || 'SanMar';
-    const descriptions = [...xml.matchAll(/<ns2:description[^>]*>([^<]+)<\/ns2:description>/gi)].map(m => m[1].trim()).filter(Boolean);
+    // Use indexOf for reliability on large XML
+    const descriptions = [];
+    let dpos = 0;
+    while (true) {
+      const dtag = xml.indexOf('<ns2:description>', dpos);
+      if (dtag === -1) break;
+      const dstart = dtag + '<ns2:description>'.length;
+      const dend = xml.indexOf('</ns2:description>', dstart);
+      if (dend === -1) break;
+      const txt = xml.substring(dstart, dend).trim();
+      if (txt.length > 4) descriptions.push(txt);
+      dpos = dend + 1;
+    }
     const category     = getValue('category') || '';
 
     // Get unique colors from ProductPartArray
