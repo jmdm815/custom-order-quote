@@ -27,20 +27,10 @@ export default async function handler(req, res) {
   });
   const xml = await r.text();
 
-  const colorNames = [...new Set([...xml.matchAll(/<colorName>([^<]+)<\/colorName>/gi)].map(m => m[1].trim()))];
+  // Show the ProductPartArray section to see exact tag names
+  const partStart = xml.indexOf('<ProductPartArray>');
+  const partEnd = xml.indexOf('</ProductPartArray>') + '</ProductPartArray>'.length;
+  const partSection = partStart > -1 ? xml.substring(partStart, Math.min(partStart + 2000, partEnd)) : 'NOT FOUND';
 
-  // Test first 8 colors
-  const urlTests = {};
-  for (const colorName of colorNames.slice(0, 8)) {
-    const colorSlug = colorName.replace(/\s+/g,'_').replace(/\//g,'_').replace(/&amp;/gi,'and').replace(/&/g,'and');
-    const url = `https://cdnm.sanmar.com/medias/mcs/PC61_${colorSlug}_FM.jpg`;
-    try {
-      const tr = await fetch(url, { method: 'HEAD' });
-      urlTests[colorName] = { slug: colorSlug, url, status: tr.status };
-    } catch(e) {
-      urlTests[colorName] = { slug: colorSlug, url, status: 'error' };
-    }
-  }
-
-  res.status(200).json({ colorNames, urlTests });
+  res.status(200).json({ partSection, xmlLength: xml.length });
 }
