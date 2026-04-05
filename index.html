@@ -1466,7 +1466,10 @@ async function loadProductDetail(p) {
     const list  = document.getElementById('product-desc-list');
     if (wrap && list && p.description) {
       wrap.style.display = 'block';
-      const bullets = p.description.replace(/<[^>]+>/g, ' ').split(/\s{2,}/).map(l => l.trim()).filter(l => l.length > 8);
+      const bullets = p.description
+      .split('|')
+      .map(l => l.replace(/<[^>]+>/g, '').trim())
+      .filter(l => l.length > 4);
       list.innerHTML = bullets.map(b => `<li>${b}</li>`).join('');
     } else if (wrap) { wrap.style.display = 'none'; }
   }
@@ -1500,10 +1503,20 @@ function buildColorGrid(skus) {
     const sw = document.createElement('div');
     sw.className = 'color-swatch';
     if (c.swatch) {
-      sw.style.backgroundImage = `url(${c.swatch})`;
-      sw.style.backgroundSize = 'cover';
+      // Test if swatch is a real image (not a placeholder)
+      const img = new Image();
+      img.onload = () => {
+        if (img.naturalWidth > 50) {
+          sw.style.backgroundImage = `url(${c.swatch})`;
+          sw.style.backgroundSize = 'cover';
+        } else {
+          sw.style.background = c.hex || '#888';
+        }
+      };
+      img.onerror = () => { sw.style.background = c.hex || '#888'; };
+      img.src = c.swatch;
     } else {
-      sw.style.background = c.hex;
+      sw.style.background = c.hex || '#888';
     }
     sw.innerHTML = `<span class="swatch-name">${c.name}</span>`;
     sw.onclick = () => {
