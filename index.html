@@ -1486,6 +1486,33 @@ async function loadProductDetail(p) {
   }
 }
 
+function colorNameToHex(name) {
+  if (!name) return '#888';
+  const n = name.toLowerCase();
+  if (n.includes('black')) return '#1a1a1a';
+  if (n.includes('white')) return '#f5f5f5';
+  if (n.includes('navy')) return '#1e3a5f';
+  if (n.includes('royal')) return '#2563eb';
+  if (n.includes('red') || n.includes('cardinal')) return '#c0392b';
+  if (n.includes('maroon') || n.includes('burgundy')) return '#7b1c2e';
+  if (n.includes('forest') || n.includes('dark green')) return '#166534';
+  if (n.includes('green')) return '#16a34a';
+  if (n.includes('gold') || n.includes('yellow')) return '#d97706';
+  if (n.includes('orange')) return '#ea580c';
+  if (n.includes('purple') || n.includes('grape')) return '#7e22ce';
+  if (n.includes('pink') || n.includes('azalea')) return '#ec4899';
+  if (n.includes('heather') || n.includes('hthr')) return '#9ca3af';
+  if (n.includes('grey') || n.includes('gray')) return '#6b7280';
+  if (n.includes('ash')) return '#d1d5db';
+  if (n.includes('brown') || n.includes('chocolate')) return '#78350f';
+  if (n.includes('tan') || n.includes('khaki') || n.includes('sand')) return '#d4a96a';
+  if (n.includes('blue') || n.includes('aquatic') || n.includes('carolina')) return '#3b82f6';
+  if (n.includes('kelly')) return '#22c55e';
+  if (n.includes('natural') || n.includes('cream')) return '#fef3c7';
+  if (n.includes('coral') || n.includes('salmon')) return '#f97316';
+  return '#888';
+}
+
 function buildColorGrid(skus) {
   // Group by color
   const byColor = {};
@@ -1502,21 +1529,13 @@ function buildColorGrid(skus) {
   Object.values(byColor).forEach(c => {
     const sw = document.createElement('div');
     sw.className = 'color-swatch';
-    if (c.swatch) {
-      // Test if swatch is a real image (not a placeholder)
-      const img = new Image();
-      img.onload = () => {
-        if (img.naturalWidth > 50) {
-          sw.style.backgroundImage = `url(${c.swatch})`;
-          sw.style.backgroundSize = 'cover';
-        } else {
-          sw.style.background = c.hex || '#888';
-        }
-      };
-      img.onerror = () => { sw.style.background = c.hex || '#888'; };
-      img.src = c.swatch;
+    // For SanMar products, swatch images are placeholders — use color-name-based color
+    const isSanmarSku = c.skus && c.skus[0] && c.skus[0]._source === 'sanmar';
+    if (c.swatch && !isSanmarSku) {
+      sw.style.backgroundImage = `url(${c.swatch})`;
+      sw.style.backgroundSize = 'cover';
     } else {
-      sw.style.background = c.hex || '#888';
+      sw.style.background = c.hex && c.hex !== '#888888' ? c.hex : colorNameToHex(c.name);
     }
     sw.innerHTML = `<span class="swatch-name">${c.name}</span>`;
     sw.onclick = () => {
