@@ -57,7 +57,8 @@ export default async function handler(req, res) {
     const colorNames = [...new Set([...xml.matchAll(/<colorName>([^<]+)<\/colorName>/gi)].map(m => m[1].trim()))];
 
     // Build style image URL using SanMar CDN pattern
-    const styleImageUrl = `https://cdnm.sanmar.com/medias/mcs/${productId}_Black_FM.jpg`;
+    const cdnUrl = `https://cdnm.sanmar.com/medias/mcs/${productId}_Black_FM.jpg`;
+    const styleImageUrl = `/api/sanmar-image?url=${encodeURIComponent(cdnUrl)}`;
 
     const product = {
       styleID:      productId,
