@@ -82,7 +82,7 @@ export default async function handler(req, res) {
         .replace(/\s+/g, '_')
         .replace(/\//g, '_');
 
-      const cdnBase = 'https://cdnm.sanmar.com/medias/mcs';
+      const cdnBase = 'https://cdnm.sanmar.com/catalog/images';
       const proxy = (url) => `/api/sanmar-image?url=${encodeURIComponent(url)}`;
       const frontImg  = proxy(`${cdnBase}/${style}_${colorSlug}_FM.jpg`);
       const backImg   = proxy(`${cdnBase}/${style}_${colorSlug}_BM.jpg`);
