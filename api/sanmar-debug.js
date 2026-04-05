@@ -1,35 +1,29 @@
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
-  // Fetch the actual SanMar product page and extract real image URLs
-  try {
-    const r = await fetch('https://www.sanmar.com/pc61-port-company-essential-tee', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120',
-        'Accept': 'text/html,application/xhtml+xml',
-      }
-    });
-    const html = await r.text();
+  // Try cdnp.sanmar.com and other patterns
+  const tests = [
+    'https://cdnp.sanmar.com/medias/mcs/PC61_Black_FM.jpg',
+    'https://cdnp.sanmar.com/catalog/images/PC61_Black_FM.jpg',
+    'https://cdnp.sanmar.com/imglib/mresjpg/2021/m10/PC61_C7528_FM.jpg',
+    // Try the SFTP image path patterns from their FTP guide
+    'https://cdnm.sanmar.com/imglib/mresjpg/2021/m9/PC61_C7528_FM.jpg',
+    'https://cdnm.sanmar.com/imglib/mresjpg/2022/m1/PC61_C7528_FM.jpg',
+    'https://cdnm.sanmar.com/imglib/mresjpg/2020/m1/PC61_C7528_FM.jpg',
+    // Try without year path
+    'https://cdnm.sanmar.com/imglib/mresjpg/PC61_Black_FM.jpg',
+    'https://cdnm.sanmar.com/imglib/imglib/mresjpg/PC61_Black_FM.jpg',
+  ];
 
-    // Extract all image URLs
-    const imgUrls = [...new Set([
-      ...[...html.matchAll(/https?:\/\/[^\s"']+\.jpg[^\s"']*/gi)].map(m => m[0]),
-      ...[...html.matchAll(/https?:\/\/[^\s"']+\.png[^\s"']*/gi)].map(m => m[0]),
-      ...[...html.matchAll(/https?:\/\/[^\s"']+\.webp[^\s"']*/gi)].map(m => m[0]),
-    ])].filter(u => u.includes('sanmar') || u.includes('cdn')).slice(0, 30);
-
-    // Also check JSON-LD or data attributes for image data
-    const jsonMatches = [...html.matchAll(/"image":\s*"([^"]+)"/gi)].map(m => m[1]).slice(0, 10);
-    const srcsetMatches = [...html.matchAll(/srcset="([^"]+)"/gi)].map(m => m[1]).slice(0, 5);
-
-    res.status(200).json({
-      status: r.status,
-      imgUrls,
-      jsonImages: jsonMatches,
-      srcsets: srcsetMatches,
-      htmlSnippet: html.substring(0, 1000),
-    });
-  } catch(e) {
-    res.status(500).json({ error: e.message });
+  const results = {};
+  for (const url of tests) {
+    try {
+      const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const buf = await r.arrayBuffer();
+      const ct = r.headers.get('content-type') || '';
+      results[url] = { status: r.status, bytes: buf.byteLength, isRealImage: ct.includes('image') && buf.byteLength > 20000 };
+    } catch(e) { results[url] = { error: e.message }; }
   }
+
+  res.status(200).json(results);
 }
