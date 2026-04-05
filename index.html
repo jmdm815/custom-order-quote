@@ -1329,7 +1329,7 @@ async function searchProducts() {
     // Search S&S and SanMar simultaneously
     const [ssResult, sanmarResult] = await Promise.allSettled([
       fetch(`/api/search?q=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []).catch(() => []),
-      fetch(`/api/sanmar-search?style=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []).catch(() => []),
+      fetch(`/api/sanmar-product?style=${encodeURIComponent(q)}`).then(r => r.ok ? r.json() : []).catch(() => []),
     ]);
 
     const ssProducts     = ssResult.status     === 'fulfilled' ? (Array.isArray(ssResult.value)     ? ssResult.value     : []) : [];
@@ -1477,7 +1477,7 @@ async function loadProductDetail(p) {
   // Fetch SKUs — route to correct supplier based on product source
   try {
     const isSanmar = p._source === 'sanmar';
-    const endpoint = isSanmar ? `/api/sanmar-skus?styleID=${encodeURIComponent(styleId)}` : `/api/skus?styleID=${encodeURIComponent(styleId)}`;
+    const endpoint = isSanmar ? `/api/sanmar-product?style=${encodeURIComponent(styleId)}&mode=skus` : `/api/skus?styleID=${encodeURIComponent(styleId)}`;
     const res = await fetch(endpoint);
     const skus = await res.json();
     buildColorGrid(Array.isArray(skus) ? skus : (skus.Skus || skus.skus || []));
