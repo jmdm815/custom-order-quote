@@ -5,7 +5,7 @@ export default async function handler(req, res) {
   if (!url) return res.status(400).send('Missing url');
 
   // Only allow cdnm.sanmar.com URLs for security
-  if (!url.startsWith('https://cdnm.sanmar.com/')) {
+  if (!url.startsWith('https://cdnm.sanmar.com/') && !url.startsWith('https://www.sanmar.com/')) {
     return res.status(403).send('Forbidden');
   }
 
