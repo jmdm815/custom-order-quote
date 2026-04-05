@@ -11,7 +11,6 @@ export default async function handler(req, res) {
 
   const user = process.env.SANMAR_USERNAME;
   const pass = process.env.SANMAR_PASSWORD;
-  const acct = process.env.SANMAR_ACCOUNT;
   if (!user || !pass) return res.status(500).json({ error: 'SanMar credentials not configured.' });
 
   const productSoap = `<?xml version="1.0" encoding="UTF-8"?>
@@ -39,54 +38,77 @@ export default async function handler(req, res) {
     });
     const xml = await r.text();
 
-    // Parse all ProductPart blocks
-    const partBlocks = [...xml.matchAll(/<ProductPart>([\s\S]*?)<\/ProductPart>/gi)].map(m => m[1]);
-
-    const getValue = (block, tag) => {
-      const m = block.match(new RegExp(`<(?:ns2:)?${tag}[^>]*>([^<]*)<\/(?:ns2:)?${tag}>`, 'i'));
-      return m ? m[1].trim() : '';
+    // Use indexOf instead of regex — more reliable on large XML (600KB+)
+    const getVal = (block, tag) => {
+      // Try without namespace first, then with ns2:
+      for (const t of [tag, `ns2:${tag}`]) {
+        const open = `<${t}>`;
+        const close = `</${t}>`;
+        const i = block.indexOf(open);
+        if (i === -1) continue;
+        const start = i + open.length;
+        const end = block.indexOf(close, start);
+        if (end === -1) continue;
+        return block.substring(start, end).trim();
+      }
+      return '';
     };
 
-    // Group by color — each color gets one entry per size
-    const skuMap = {};
-    partBlocks.forEach(part => {
-      const partId    = getValue(part, 'partId');
-      const colorName = getValue(part, 'colorName');
-      const size      = getValue(part, 'labelSize');
-      const pms       = getValue(part, 'approximatePms');
+    // Extract all ProductPart blocks
+    const partBlocks = [];
+    let searchFrom = 0;
+    while (true) {
+      const start = xml.indexOf('<ProductPart>', searchFrom);
+      if (start === -1) break;
+      const end = xml.indexOf('</ProductPart>', start);
+      if (end === -1) break;
+      partBlocks.push(xml.substring(start + '<ProductPart>'.length, end));
+      searchFrom = end + '</ProductPart>'.length;
+    }
 
+    // Group by color
+    const skuMap = {};
+    const style = styleID.trim().toUpperCase();
+
+    partBlocks.forEach(part => {
+      const partId    = getVal(part, 'partId');
+      const colorName = getVal(part, 'colorName');
+      const size      = getVal(part, 'labelSize');
       if (!colorName || !size) return;
 
-      // SanMar CDN base: cdnm.sanmar.com
-      const colorSlug = colorName.replace(/\s+/g,'_').replace(/\//g,'_').replace(/&/g,'and');
-      const frontImg  = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_FM.jpg`;
-      const backImg   = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_BM.jpg`;
-      const sideImg   = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_SM.jpg`;
-      const swatchImg = `https://cdnm.sanmar.com/medias/mcs/${styleID.toUpperCase()}_${colorSlug}_SS.jpg`;
+      const colorSlug = colorName
+        .replace(/&amp;/gi, 'and')
+        .replace(/&/g, 'and')
+        .replace(/\s+/g, '_')
+        .replace(/\//g, '_');
+
+      const base = 'https://cdnm.sanmar.com/medias/mcs';
+      const frontImg  = `${base}/${style}_${colorSlug}_FM.jpg`;
+      const backImg   = `${base}/${style}_${colorSlug}_BM.jpg`;
+      const sideImg   = `${base}/${style}_${colorSlug}_SM.jpg`;
+      const swatchImg = `${base}/${style}_${colorSlug}_SS.jpg`;
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
-          color1: pmsToHex(pms) || '#888888',
+          color1: '#888888',
           colorFrontImage:  frontImg,
           colorBackImage:   backImg,
           colorSideImage:   sideImg,
           colorSwatchImage: swatchImg,
           colorOnModelFrontImage: '',
-          colorOnModelSideImage: '',
-          colorOnModelBackImage: '',
+          colorOnModelSideImage:  '',
+          colorOnModelBackImage:  '',
           sizes: [],
         };
       }
       skuMap[colorName].sizes.push({ partId, size });
     });
 
-    // Now fetch inventory for each partId using the inventory endpoint
-    // Build list of all partIds
-    const allPartIds = partBlocks.map(p => getValue(p, 'partId')).filter(Boolean);
-
-    // Fetch inventory in batches - SanMar inventory uses PromoStandards too
-    const invSoap = `<?xml version="1.0" encoding="UTF-8"?>
+    // Fetch inventory via PromoStandards Inventory Service
+    let invMap = {};
+    try {
+      const invSoap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/InventoryService/1.0.0/"
                   xmlns:shared="http://www.promostandards.org/WSDL/InventoryService/1.0.0/SharedObjects/">
@@ -96,13 +118,11 @@ export default async function handler(req, res) {
       <shared:wsVersion>1.0.0</shared:wsVersion>
       <shared:id>${user}</shared:id>
       <shared:password>${pass}</shared:password>
-      <shared:productId>${styleID.trim().toUpperCase()}</shared:productId>
+      <shared:productId>${style}</shared:productId>
     </ns:GetInventoryLevelsRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
 
-    let invMap = {};
-    try {
       const invR = await fetch('https://ws.sanmar.com:8080/promostandards/InventoryServiceBinding', {
         method: 'POST',
         headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
@@ -110,30 +130,33 @@ export default async function handler(req, res) {
       });
       const invXml = await invR.text();
 
-      // Parse inventory: <partId>xxx</partId> ... <Quantity><value>500</value>
-      const partInvBlocks = [...invXml.matchAll(/<PartInventoryArray>([\s\S]*?)<\/PartInventoryArray>/gi)];
-      if (partInvBlocks.length) {
-        const entries = [...partInvBlocks[0][1].matchAll(/<PartInventory>([\s\S]*?)<\/PartInventory>/gi)];
-        entries.forEach(e => {
-          const pid = getValue(e[1], 'partId');
-          const qty = parseInt(getValue(e[1], 'value') || '0') || 0;
-          if (pid) invMap[pid] = qty;
-        });
+      // Parse inventory using indexOf
+      let invSearch = 0;
+      while (true) {
+        const start = invXml.indexOf('<PartInventory>', invSearch);
+        if (start === -1) break;
+        const end = invXml.indexOf('</PartInventory>', start);
+        if (end === -1) break;
+        const block = invXml.substring(start, end);
+        const pid = getVal(block, 'partId');
+        const qty = parseInt(getVal(block, 'value') || '0') || 0;
+        if (pid) invMap[pid] = (invMap[pid] || 0) + qty;
+        invSearch = end + '</PartInventory>'.length;
       }
     } catch(e) {
-      // Inventory fetch failed — show all as in stock
+      // Inventory unavailable — default to in stock
     }
 
-    // Build final SKU array matching S&S format
+    // Build final SKU array
     const skus = [];
     Object.values(skuMap).forEach(color => {
       color.sizes.forEach(s => {
         skus.push({
-          sku:             s.partId,
-          styleID,
-          colorName:       color.colorName,
-          color1:          color.color1,
-          sizeName:        s.size,
+          sku:              s.partId,
+          styleID:          style,
+          colorName:        color.colorName,
+          color1:           color.color1,
+          sizeName:         s.size,
           quantityAvailable: invMap[s.partId] !== undefined ? invMap[s.partId] : 999,
           colorFrontImage:  color.colorFrontImage,
           colorBackImage:   color.colorBackImage,
@@ -151,18 +174,4 @@ export default async function handler(req, res) {
   } catch (err) {
     return res.status(500).json({ error: 'Failed to reach SanMar API', detail: err.message });
   }
-}
-
-// Convert PMS color code to approximate hex
-function pmsToHex(pms) {
-  if (!pms) return null;
-  // Basic mapping for common PMS colors — most will fallback to swatch image
-  const map = {
-    'Black': '#1a1a1a', 'White': '#ffffff', 'Navy': '#1e3a5f',
-    'Red': '#c8392b', 'Royal': '#2563eb', 'Forest': '#166534',
-  };
-  for (const [k, v] of Object.entries(map)) {
-    if (pms.toLowerCase().includes(k.toLowerCase())) return v;
-  }
-  return null;
 }
