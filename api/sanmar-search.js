@@ -1,5 +1,4 @@
 // api/sanmar-search.js
-// Search SanMar via PromoStandards Product Data Service
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -42,15 +41,26 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: `Style ${style} not found in SanMar catalog.` });
     }
 
-    const getValue = (tag) => {
-      const m = xml.match(new RegExp(`<(?:ns2:)?${tag}[^>]*>([^<]*)<\/(?:ns2:)?${tag}>`, 'i'));
-      return m ? m[1].trim() : '';
+    // Use indexOf for all parsing — regex fails on 600KB XML
+    const getFirst = (tag) => {
+      for (const t of [tag, `ns2:${tag}`]) {
+        const open = `<${t}>`;
+        const i = xml.indexOf(open);
+        if (i === -1) continue;
+        const start = i + open.length;
+        const end = xml.indexOf(`</${t}>`, start);
+        if (end === -1) continue;
+        return xml.substring(start, end).trim();
+      }
+      return '';
     };
 
-    const productId    = getValue('productId') || style.toUpperCase();
-    const productName  = getValue('productName') || style.toUpperCase();
-    const brand        = getValue('productBrand') || 'SanMar';
-    // Use indexOf for reliability on large XML
+    const productId   = getFirst('productId') || style.toUpperCase();
+    const productName = getFirst('productName') || style.toUpperCase();
+    const brand       = getFirst('productBrand') || 'SanMar';
+    const category    = getFirst('category') || '';
+
+    // Parse all descriptions
     const descriptions = [];
     let dpos = 0;
     while (true) {
@@ -63,14 +73,6 @@ export default async function handler(req, res) {
       if (txt.length > 4) descriptions.push(txt);
       dpos = dend + 1;
     }
-    const category     = getValue('category') || '';
-
-    // Get unique colors from ProductPartArray
-    const colorNames = [...new Set([...xml.matchAll(/<colorName>([^<]+)<\/colorName>/gi)].map(m => m[1].trim()))];
-
-    // Build style image URL using SanMar CDN pattern
-    const cdnUrl = `https://cdnm.sanmar.com/catalog/images/${productId}_Black_FM.jpg`;
-    const styleImageUrl = `/api/sanmar-image?url=${encodeURIComponent(cdnUrl)}`;
 
     const product = {
       styleID:      productId,
@@ -79,8 +81,7 @@ export default async function handler(req, res) {
       brandName:    brand,
       baseCategory: category,
       description:  descriptions.join(' | '),
-      styleImage:   styleImageUrl,
-      _colorNames:  colorNames,
+      styleImage:   '',
       _source:      'sanmar',
     };
 
