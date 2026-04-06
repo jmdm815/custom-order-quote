@@ -152,8 +152,19 @@ export default async function handler(req, res) {
         .replace(/&amp;/gi, 'and').replace(/&/g, 'and')
         .replace(/\s+/g, '_').replace(/\//g, '_');
 
-      // Look up images from Redis map
-      const imgs = imageMap[colorSlug] || imageMap[colorName] || {};
+      // Look up images from Redis map — try exact slug, then fuzzy match
+      let imgs = imageMap[colorSlug] || imageMap[colorName] || {};
+      if (!imgs.front) {
+        // Fuzzy match: find Redis color whose slug is contained in or similar to our colorName
+        const colorNameUpper = colorName.toUpperCase().replace(/\s+/g,'');
+        for (const [redisSlug, redisImgs] of Object.entries(imageMap)) {
+          const redisUpper = redisSlug.toUpperCase().replace(/_/g,'');
+          if (colorNameUpper.startsWith(redisUpper.substring(0,5)) || redisUpper.startsWith(colorNameUpper.substring(0,5))) {
+            imgs = redisImgs;
+            break;
+          }
+        }
+      }
       const proxy = (u) => {
         if (!u) return '';
         // Handle relative swatch filenames
@@ -161,13 +172,15 @@ export default async function handler(req, res) {
         return `/api/sanmar-image?url=${encodeURIComponent(u)}`;
       };
 
+      const redisColorName = imgs.colorName || colorName; // use Redis full name for inventory
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
+          redisColorName,
           color1: '#888888',
-          colorFrontImage:        proxy(imgs.side  || imgs.front), // model front = best hero image
+          colorFrontImage:        proxy(imgs.side  || imgs.front),
           colorBackImage:         proxy(imgs.back),
-          colorSideImage:         proxy(imgs.front), // flat front as "side" view
+          colorSideImage:         proxy(imgs.front),
           colorSwatchImage:       proxy(imgs.swatch),
           colorOnModelFrontImage: '',
           colorOnModelSideImage:  '',
@@ -186,6 +199,7 @@ export default async function handler(req, res) {
           sku:              s.partId,
           styleID:          styleUpper,
           colorName:        color.colorName,
+          redisColorName:   color.redisColorName || color.colorName,
           color1:           color.color1,
           sizeName:         s.size,
           quantityAvailable: 999,
