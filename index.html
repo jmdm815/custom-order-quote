@@ -1542,6 +1542,31 @@ function colorNameToHex(name) {
   if (n.includes('kelly')) return '#22c55e';
   if (n.includes('natural') || n.includes('cream')) return '#fef3c7';
   if (n.includes('coral') || n.includes('salmon')) return '#f97316';
+  // Fuzzy color matching for unusual names
+  const words = n.split(/[\s_-]/);
+  for (const w of words) {
+    if (['black','ebony','onyx','jet'].includes(w)) return '#1a1a1a';
+    if (['white','ivory','snow','cream','natural'].includes(w)) return '#f5f5f5';
+    if (['navy','midnight','indigo'].includes(w)) return '#1e3a5f';
+    if (['royal','cobalt','azure'].includes(w)) return '#2563eb';
+    if (['red','crimson','cardinal','scarlet','cherry'].includes(w)) return '#c0392b';
+    if (['maroon','burgundy','wine','garnet'].includes(w)) return '#7b1c2e';
+    if (['forest','hunter','bottle'].includes(w)) return '#166534';
+    if (['green','lime','emerald','kelly','clover','olive'].includes(w)) return '#16a34a';
+    if (['gold','yellow','butter','sunflower','lemon'].includes(w)) return '#d97706';
+    if (['orange','tangerine','burnt','copper','rust'].includes(w)) return '#ea580c';
+    if (['purple','violet','grape','plum','lavender','amethyst'].includes(w)) return '#7e22ce';
+    if (['pink','rose','azalea','fuchsia','flamingo','blush'].includes(w)) return '#ec4899';
+    if (['heather','hthr','athletic','sport','marl'].includes(w)) return '#9ca3af';
+    if (['grey','gray','graphite','smoke','charcoal','slate','steel'].includes(w)) return '#6b7280';
+    if (['ash','silver','frost'].includes(w)) return '#d1d5db';
+    if (['brown','chocolate','mocha','coffee','cocoa','java'].includes(w)) return '#78350f';
+    if (['tan','khaki','sand','wheat','camel','dune','tundra'].includes(w)) return '#c4a882';
+    if (['blue','teal','aqua','aquatic','carolina','sky','denim','bay','pacific','chambray'].includes(w)) return '#3b82f6';
+    if (['turquoise','caribbean','lagoon','tropical','pool','pond'].includes(w)) return '#06b6d4';
+    if (['coral','salmon','melon','peach'].includes(w)) return '#f97316';
+    if (['seafoam','mint','sage','eucalyptus'].includes(w)) return '#6ee7b7';
+  }
   return '#888';
 }
 
@@ -1579,7 +1604,7 @@ function buildColorGrid(skus) {
       updateProductImage(c);
       // Fetch real inventory for SanMar products
       if (c.skus && c.skus[0] && c.skus[0]._source === 'sanmar') {
-        fetchSanmarInventory(state.product.styleID, c.name, c.skus);
+        setTimeout(() => fetchSanmarInventory(state.product.styleID, c.name, c.skus), 100);
       }
     };
     grid.appendChild(sw);
