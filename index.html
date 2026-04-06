@@ -1498,7 +1498,8 @@ async function fetchSanmarInventory(styleID, colorName, skus) {
     const res = await fetch(`/api/sanmar-inventory?style=${encodeURIComponent(styleID)}&color=${encodeURIComponent(colorName)}`);
     if (!res.ok) return;
     const data = await res.json();
-    const totalQty = data.qty || 0;
+    if (data.qty === null || data.qty === undefined) return; // invalid color for inventory API
+    const totalQty = data.qty;
     // Update ALL stock badges currently visible in the size table
     const allBadges = document.querySelectorAll('#size-tbody .stock-badge');
     const allInputs = document.querySelectorAll('#size-tbody .qty-input');
