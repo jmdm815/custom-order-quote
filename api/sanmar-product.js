@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   const styleUpper = style.trim().toUpperCase();
   const cacheKey = `sanmar:product:${styleUpper}`;
 
-  // Check Redis cache first
+  // Check cache
   if (REDIS_URL && REDIS_TOKEN) {
     try {
       const cacheRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(cacheKey)}`, {
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // Load image map from Redis
+  // Load image map
   let imageMap = {};
   if (REDIS_URL && REDIS_TOKEN) {
     try {
@@ -52,24 +52,19 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // ── STRONG ABBREVIATION FUZZY MATCHER ──
+  // ── EVEN STRONGER FUZZY MATCHER ──
   const lookupFuzzy = (colorName, map) => {
     if (!colorName || !map) return { color1: '#888888' };
 
     let clean = colorName.toLowerCase()
       .replace(/&amp;/g, 'and')
       .replace(/&/g, 'and')
-      .replace(/\./g, '')           // Remove periods: Ath. → Ath
+      .replace(/\./g, '')
       .replace(/true /g, '')
+      .replace(/brn/g, 'brown')
+      .replace(/hthr/g, 'heather')
+      .replace(/athletic hthr/g, 'athletic heather')
       .trim();
-
-    // Expand common SanMar abbreviations
-    clean = clean
-      .replace(/\bath\b/g, 'athletic')
-      .replace(/\bs\b/g, 'safety')
-      .replace(/\bd\b/g, 'dark')
-      .replace(/\blt\b/g, 'light')
-      .replace(/\bdk\b/g, 'dark');
 
     const queryWords = clean.split(/\s+/).filter(Boolean);
 
@@ -80,17 +75,19 @@ export default async function handler(req, res) {
         .replace(/\./g, '')
         .trim();
 
+      // Direct replacements for common abbreviations
+      keyClean = keyClean
+        .replace(/woodlandbrn/g, 'woodland brown')
+        .replace(/athletichthr/g, 'athletic heather');
+
       const keyWords = keyClean.split(/\s+/).filter(Boolean);
 
-      // Exact match
       if (keyClean === clean) return { ...data, color1: data.color1 || '#888888' };
 
-      // Query words all appear in key
       if (queryWords.every(qw => keyClean.includes(qw))) {
         return { ...data, color1: data.color1 || '#888888' };
       }
 
-      // Key words all appear in query
       if (keyWords.every(kw => clean.includes(kw))) {
         return { ...data, color1: data.color1 || '#888888' };
       }
@@ -98,7 +95,7 @@ export default async function handler(req, res) {
     return { color1: '#888888' };
   };
 
-  // SOAP Request
+  // SOAP + parsing code (same as before)
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
@@ -241,7 +238,6 @@ export default async function handler(req, res) {
       _source: 'sanmar',
     };
 
-    // Cache for 24 hours
     if (REDIS_URL && REDIS_TOKEN) {
       try {
         await fetch(`${REDIS_URL}/setex/${encodeURIComponent(cacheKey)}/86400`, {
