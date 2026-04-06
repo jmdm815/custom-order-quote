@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   const styleUpper = style.trim().toUpperCase();
   const cacheKey = `sanmar:product:${styleUpper}`;
 
-  // Check cache
+  // Check Redis cache
   if (REDIS_URL && REDIS_TOKEN) {
     try {
       const cacheRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(cacheKey)}`, {
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // Load image + color map
+  // Load image map
   let imageMap = {};
   if (REDIS_URL && REDIS_TOKEN) {
     try {
@@ -52,10 +52,9 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // ── STRONGER FUZZY MATCHER + COLOR EXTRACTION ──
+  // Improved fuzzy matcher
   const lookupFuzzy = (colorName, map) => {
     if (!colorName || !map) return { color1: '#888888' };
-
     const normalize = (str) => str.toLowerCase()
       .replace(/&amp;/gi, 'and')
       .replace(/&/g, 'and')
@@ -64,7 +63,6 @@ export default async function handler(req, res) {
       .replace(/dark heather/gi, 'd heather')
       .replace(/athletic/gi, 'ath')
       .replace(/true /gi, '')
-      .replace(/celadon/gi, 'celadon')
       .trim();
 
     const queryNorm = normalize(colorName);
@@ -72,20 +70,16 @@ export default async function handler(req, res) {
 
     for (const [key, data] of Object.entries(map)) {
       const keyNorm = normalize(key);
-
       if (keyNorm === queryNorm || 
           queryWords.every(qw => keyNorm.includes(qw)) ||
           keyNorm.includes(queryNorm)) {
-        return {
-          ...data,
-          color1: data.color1 || '#888888'
-        };
+        return { ...data, color1: data.color1 || '#888888' };
       }
     }
     return { color1: '#888888' };
   };
 
-  // ── SOAP REQUEST ──
+  // SOAP Request
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
@@ -115,14 +109,35 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: `Style ${style} not found.` });
     }
 
-    const getFirst = (tag) => { /* same as before */ };
-    const getVal = (block, tag) => { /* same as before */ };
+    const getFirst = (tag) => {
+      for (const t of [tag, `ns2:${tag}`]) {
+        const i = xml.indexOf(`<${t}>`);
+        if (i === -1) continue;
+        const start = i + t.length + 2;
+        const end = xml.indexOf(`</${t}>`, start);
+        if (end === -1) continue;
+        return xml.substring(start, end).trim();
+      }
+      return '';
+    };
+
+    const getVal = (block, tag) => {
+      for (const t of [tag, `ns2:${tag}`]) {
+        const i = block.indexOf(`<${t}>`);
+        if (i === -1) continue;
+        const start = i + t.length + 2;
+        const end = block.indexOf(`</${t}>`, start);
+        if (end === -1) continue;
+        return block.substring(start, end).trim();
+      }
+      return '';
+    };
 
     const productName = getFirst('productName') || styleUpper;
     const brand = getFirst('productBrand') || 'SanMar';
     const category = getFirst('category') || '';
 
-    // Parse descriptions (same as before)
+    // Descriptions
     const descriptions = [];
     let dpos = 0;
     while (true) {
@@ -136,6 +151,7 @@ export default async function handler(req, res) {
       dpos = dend + 1;
     }
 
+    // Parse SKUs
     const skuMap = {};
     let searchFrom = 0;
     while (true) {
@@ -157,13 +173,15 @@ export default async function handler(req, res) {
 
       const imgData = imageMap[colorSlug] || imageMap[colorName] || lookupFuzzy(colorName, imageMap);
 
-      const proxy = (u) => u ? `/api/sanmar-image?url=${encodeURIComponent(u.startsWith('http') ? u : `https://cdnm.sanmar.com/imglib/swatches/${u}`)}` : '';
+      const proxy = (u) => u 
+        ? `/api/sanmar-image?url=${encodeURIComponent(u.startsWith('http') ? u : `https://cdnm.sanmar.com/imglib/swatches/${u}`)}` 
+        : '';
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
           inventoryColorName: imgData.inventoryColorName || colorName,
-          color1: imgData.color1 || '#888888',                    // ← Now pulls real color
+          color1: imgData.color1 || '#888888',
           colorFrontImage: proxy(imgData.side || imgData.front),
           colorBackImage: proxy(imgData.back),
           colorSideImage: proxy(imgData.front),
@@ -191,7 +209,6 @@ export default async function handler(req, res) {
       }))
     );
 
-    // Smart image fallback
     const firstWithImg = Object.values(skuMap).find(c => c.colorFrontImage);
     const styleImage = firstWithImg?.colorFrontImage || 
                       `https://images.ssactivewear.com/im/1-0-0/500/${styleUpper}_FRONT.jpg`;
@@ -207,7 +224,7 @@ export default async function handler(req, res) {
       _source: 'sanmar',
     };
 
-    // Cache result
+    // Cache
     if (REDIS_URL && REDIS_TOKEN) {
       try {
         await fetch(`${REDIS_URL}/setex/${encodeURIComponent(cacheKey)}/86400`, {
