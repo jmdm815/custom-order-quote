@@ -159,17 +159,62 @@ export default async function handler(req, res) {
       skuMap[colorName].sizes.push({ partId, size });
     }
 
+    // Fetch inventory per color from SanMar inventory endpoint
+    const invMap = {}; // key: "colorName|size" → qty
+    const acct = process.env.SANMAR_ACCOUNT;
+    const uniqueColors = [...new Set(Object.values(skuMap).map(c => c.colorName))];
+    
+    await Promise.allSettled(uniqueColors.map(async (colorName) => {
+      const invSoap = `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                  xmlns:web="http://webservice.integration.sanmar.com/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <web:getInventoryQtyForStyleColorSize>
+      <arg0>${acct}</arg0>
+      <arg1>${user}</arg1>
+      <arg2>${pass}</arg2>
+      <arg3>${styleUpper}</arg3>
+      <arg4>${colorName}</arg4>
+      <arg5></arg5>
+      <arg6></arg6>
+    </web:getInventoryQtyForStyleColorSize>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+      try {
+        const invR = await fetch('https://ws.sanmar.com:8080/SanMarWebService/SanMarWebServicePort', {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/xml;charset=UTF-8', 'SOAPAction': '""' },
+          body: invSoap,
+        });
+        const invXml = await invR.text();
+        if (invXml.includes('errorOccurred>false')) {
+          // Get all listResponse values (per warehouse) and sum them
+          const qtys = [...invXml.matchAll(/<listResponse[^>]*>(\d+)<\/listResponse>/g)].map(m => parseInt(m[1]));
+          const total = qtys.reduce((a, b) => a + b, 0);
+          // The sizes for this color
+          const colorSku = skuMap[colorName];
+          if (colorSku) {
+            colorSku.sizes.forEach(s => {
+              invMap[`${colorName}|${s.size}`] = total;
+            });
+          }
+        }
+      } catch(e) { /* inventory unavailable for this color */ }
+    }));
+
     // Build SKUs array
     const skus = [];
     Object.values(skuMap).forEach(color => {
       color.sizes.forEach(s => {
+        const qty = invMap[`${color.colorName}|${s.size}`] ?? 999;
         skus.push({
           sku:              s.partId,
           styleID:          styleUpper,
           colorName:        color.colorName,
           color1:           color.color1,
           sizeName:         s.size,
-          quantityAvailable: 999,
+          quantityAvailable: qty,
           colorFrontImage:  color.colorFrontImage,
           colorBackImage:   color.colorBackImage,
           colorSideImage:   color.colorSideImage,
