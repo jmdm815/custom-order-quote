@@ -1342,8 +1342,8 @@ async function searchProducts() {
     const qUpper = q.trim().toUpperCase();
     const all = [...ssProducts, ...sanmarProducts];
     all.sort((a, b) => {
-      const aExact = (a.styleID || a.styleName || '').toUpperCase() === qUpper ? 0 : 1;
-      const bExact = (b.styleID || b.styleName || '').toUpperCase() === qUpper ? 0 : 1;
+      const aExact = String(a.styleID || a.styleName || '').toUpperCase() === qUpper ? 0 : 1;
+      const bExact = String(b.styleID || b.styleName || '').toUpperCase() === qUpper ? 0 : 1;
       return aExact - bExact;
     });
     renderProductGrid(all);
