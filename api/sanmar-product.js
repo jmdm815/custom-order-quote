@@ -1,6 +1,6 @@
 // api/sanmar-product.js
-// Single endpoint — returns both product info AND skus in one call
-// Replaces sanmar-search.js + sanmar-skus.js to avoid double 600KB XML fetches
+// Single endpoint — returns both product info AND skus in one SanMar API call
+// Looks up images from Redis (populated by sanmar-sync-local.js)
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,14 +9,35 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { style, mode } = req.query;
-  // mode=search → return product card array
-  // mode=skus   → return skus array
   if (!style) return res.status(400).json({ error: 'Missing style param' });
 
   const user = process.env.SANMAR_USERNAME;
   const pass = process.env.SANMAR_PASSWORD;
+  const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
+  const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
   if (!user || !pass) return res.status(500).json({ error: 'SanMar credentials not configured.' });
 
+  const styleUpper = style.trim().toUpperCase();
+
+  // Step 1: Fetch image map from Redis
+  let imageMap = {};
+  if (REDIS_URL && REDIS_TOKEN) {
+    try {
+      const redisKey = `sanmar:images:${styleUpper}`;
+      const redisRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(redisKey)}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+      });
+      const redisData = await redisRes.json();
+      if (redisData.result) {
+        imageMap = JSON.parse(redisData.result);
+      }
+    } catch(e) {
+      // Redis unavailable — proceed without images
+    }
+  }
+
+  // Step 2: Fetch product data from SanMar
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
@@ -29,7 +50,7 @@ export default async function handler(req, res) {
       <shared:password>${pass}</shared:password>
       <shared:localizationCountry>US</shared:localizationCountry>
       <shared:localizationLanguage>en</shared:localizationLanguage>
-      <shared:productId>${style.trim().toUpperCase()}</shared:productId>
+      <shared:productId>${styleUpper}</shared:productId>
     </ns:GetProductRequest>
   </soapenv:Body>
 </soapenv:Envelope>`;
@@ -46,7 +67,7 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: `Style ${style} not found.` });
     }
 
-    // indexOf-based parser — reliable on 600KB XML
+    // indexOf-based parser
     const getFirst = (tag) => {
       for (const t of [tag, `ns2:${tag}`]) {
         const i = xml.indexOf(`<${t}>`);
@@ -71,9 +92,7 @@ export default async function handler(req, res) {
       return '';
     };
 
-    // Parse product-level info
-    const productId   = getFirst('productId') || style.toUpperCase();
-    const productName = getFirst('productName') || style.toUpperCase();
+    const productName = getFirst('productName') || styleUpper;
     const brand       = getFirst('productBrand') || 'SanMar';
     const category    = getFirst('category') || '';
 
@@ -91,9 +110,8 @@ export default async function handler(req, res) {
       dpos = dend + 1;
     }
 
-    // Parse all ProductPart blocks for SKUs
+    // Parse ProductPart blocks
     const skuMap = {};
-    const styleUpper = style.trim().toUpperCase();
     let searchFrom = 0;
     while (true) {
       const start = xml.indexOf('<ProductPart>', searchFrom);
@@ -112,17 +130,20 @@ export default async function handler(req, res) {
         .replace(/&amp;/gi, 'and').replace(/&/g, 'and')
         .replace(/\s+/g, '_').replace(/\//g, '_');
 
+      // Look up images from Redis map
+      const imgs = imageMap[colorSlug] || imageMap[colorName] || {};
+
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
           color1: '#888888',
-          colorFrontImage: '',
-          colorBackImage: '',
-          colorSideImage: '',
-          colorSwatchImage: '',
+          colorFrontImage:        imgs.front  || '',
+          colorBackImage:         imgs.back   || '',
+          colorSideImage:         imgs.side   || '',
+          colorSwatchImage:       imgs.swatch || '',
           colorOnModelFrontImage: '',
-          colorOnModelSideImage: '',
-          colorOnModelBackImage: '',
+          colorOnModelSideImage:  '',
+          colorOnModelBackImage:  '',
           sizes: [],
         };
       }
@@ -134,23 +155,27 @@ export default async function handler(req, res) {
     Object.values(skuMap).forEach(color => {
       color.sizes.forEach(s => {
         skus.push({
-          sku: s.partId,
-          styleID: styleUpper,
-          colorName: color.colorName,
-          color1: color.color1,
-          sizeName: s.size,
+          sku:              s.partId,
+          styleID:          styleUpper,
+          colorName:        color.colorName,
+          color1:           color.color1,
+          sizeName:         s.size,
           quantityAvailable: 999,
-          colorFrontImage: '',
-          colorBackImage: '',
-          colorSideImage: '',
-          colorSwatchImage: '',
+          colorFrontImage:  color.colorFrontImage,
+          colorBackImage:   color.colorBackImage,
+          colorSideImage:   color.colorSideImage,
+          colorSwatchImage: color.colorSwatchImage,
           colorOnModelFrontImage: '',
-          colorOnModelSideImage: '',
-          colorOnModelBackImage: '',
+          colorOnModelSideImage:  '',
+          colorOnModelBackImage:  '',
           _source: 'sanmar',
         });
       });
     });
+
+    // Get first color's front image for card
+    const firstColorWithImage = Object.values(skuMap).find(c => c.colorFrontImage);
+    const styleImage = firstColorWithImage ? firstColorWithImage.colorFrontImage : '';
 
     const product = {
       styleID:      styleUpper,
@@ -159,9 +184,8 @@ export default async function handler(req, res) {
       brandName:    brand,
       baseCategory: category,
       description:  descriptions.join(' | '),
-      styleImage:   '',
+      styleImage,
       _source:      'sanmar',
-      _skus:        skus, // embed skus in product so frontend can use them directly
     };
 
     if (mode === 'skus') return res.status(200).json(skus);
