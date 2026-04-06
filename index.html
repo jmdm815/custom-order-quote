@@ -1622,7 +1622,8 @@ function buildColorGrid(skus) {
       updateProductImage(c);
       // Fetch real inventory for SanMar products
       if (c.skus && c.skus[0] && c.skus[0]._source === 'sanmar') {
-        setTimeout(() => fetchSanmarInventory(state.product.styleID, c.name, c.skus), 100);
+        const invColorName = c.skus[0].redisColorName || c.name;
+        setTimeout(() => fetchSanmarInventory(state.product.styleID, invColorName, c.skus), 100);
       }
     };
     grid.appendChild(sw);
