@@ -1,7 +1,4 @@
 // api/sanmar-product.js
-// Single endpoint — returns both product info AND skus in one SanMar API call
-// Looks up images from Redis (populated by sanmar-sync-local.js)
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -15,33 +12,12 @@ export default async function handler(req, res) {
   const pass = process.env.SANMAR_PASSWORD;
   const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
   const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
-
   if (!user || !pass) return res.status(500).json({ error: 'SanMar credentials not configured.' });
 
   const styleUpper = style.trim().toUpperCase();
-
-  // Step 1: Fetch image map from Redis
-  let imageMap = {};
-  if (REDIS_URL && REDIS_TOKEN) {
-    try {
-      const redisKey = `sanmar:images:${styleUpper}`;
-      const redisRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(redisKey)}`, {
-        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-      });
-      const redisData = await redisRes.json();
-      if (redisData.result) {
-        // Value may be double-stringified — parse until we get an object
-        let val = redisData.result;
-        while (typeof val === 'string') { try { val = JSON.parse(val); } catch(e) { break; } }
-        imageMap = val || {};
-      }
-    } catch(e) {
-      // Redis unavailable — proceed without images
-    }
-  }
-
-  // Check Redis cache for product data first
   const cacheKey = `sanmar:product:${styleUpper}`;
+
+  // Check Redis cache first
   if (REDIS_URL && REDIS_TOKEN) {
     try {
       const cacheRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(cacheKey)}`, {
@@ -56,10 +32,26 @@ export default async function handler(req, res) {
           return res.status(200).json([cached.product]);
         }
       }
-    } catch(e) { /* cache miss — proceed to fetch */ }
+    } catch(e) {}
   }
 
-  // Step 2: Fetch product data from SanMar
+  // Fetch image map from Redis
+  let imageMap = {};
+  if (REDIS_URL && REDIS_TOKEN) {
+    try {
+      const imgRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(`sanmar:images:${styleUpper}`)}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+      });
+      const imgData = await imgRes.json();
+      if (imgData.result) {
+        let val = imgData.result;
+        while (typeof val === 'string') { try { val = JSON.parse(val); } catch(e) { break; } }
+        imageMap = val || {};
+      }
+    } catch(e) {}
+  }
+
+  // Fetch from SanMar PromoStandards
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
@@ -89,7 +81,6 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: `Style ${style} not found.` });
     }
 
-    // indexOf-based parser
     const getFirst = (tag) => {
       for (const t of [tag, `ns2:${tag}`]) {
         const i = xml.indexOf(`<${t}>`);
@@ -115,10 +106,9 @@ export default async function handler(req, res) {
     };
 
     const productName = getFirst('productName') || styleUpper;
-    const brand       = getFirst('productBrand') || 'SanMar';
-    const category    = getFirst('category') || '';
+    const brand = getFirst('productBrand') || 'SanMar';
+    const category = getFirst('category') || '';
 
-    // Parse descriptions
     const descriptions = [];
     let dpos = 0;
     while (true) {
@@ -143,95 +133,78 @@ export default async function handler(req, res) {
       const part = xml.substring(start + '<ProductPart>'.length, end);
       searchFrom = end + '</ProductPart>'.length;
 
-      const partId    = getVal(part, 'partId');
+      const partId = getVal(part, 'partId');
       const colorName = getVal(part, 'colorName');
-      const size      = getVal(part, 'labelSize');
+      const size = getVal(part, 'labelSize');
       if (!colorName || !size) continue;
 
-      const colorSlug = colorName
-        .replace(/&amp;/gi, 'and').replace(/&/g, 'and')
-        .replace(/\s+/g, '_').replace(/\//g, '_');
+      const colorSlug = colorName.replace(/&amp;/gi,'and').replace(/&/g,'and').replace(/\s+/g,'_').replace(/\//g,'_');
 
-      // Look up images from Redis map — try exact slug, then fuzzy match
-      let imgs = imageMap[colorSlug] || imageMap[colorName] || {};
-      if (!imgs.front) {
-        // Fuzzy match: find Redis color whose slug is contained in or similar to our colorName
-        const colorNameUpper = colorName.toUpperCase().replace(/\s+/g,'');
-        for (const [redisSlug, redisImgs] of Object.entries(imageMap)) {
-          const redisUpper = redisSlug.toUpperCase().replace(/_/g,'');
-          if (colorNameUpper.startsWith(redisUpper.substring(0,5)) || redisUpper.startsWith(colorNameUpper.substring(0,5))) {
-            imgs = redisImgs;
-            break;
-          }
-        }
-      }
+      // Look up images — try slug then colorName directly
+      const imgs = imageMap[colorSlug] || imageMap[colorName] || {};
+
       const proxy = (u) => {
         if (!u) return '';
-        // Handle relative swatch filenames
         if (!u.startsWith('http')) u = `https://cdnm.sanmar.com/imglib/swatches/${u}`;
         return `/api/sanmar-image?url=${encodeURIComponent(u)}`;
       };
 
-      const redisColorName = imgs.colorName || colorName; // use Redis full name for inventory
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
-          redisColorName,
+          inventoryColorName: imgs.colorName || colorName,
           color1: '#888888',
-          colorFrontImage:        proxy(imgs.side  || imgs.front),
-          colorBackImage:         proxy(imgs.back),
-          colorSideImage:         proxy(imgs.front),
-          colorSwatchImage:       proxy(imgs.swatch),
+          colorFrontImage: proxy(imgs.side || imgs.front),
+          colorBackImage: proxy(imgs.back),
+          colorSideImage: proxy(imgs.front),
+          colorSwatchImage: proxy(imgs.swatch),
           colorOnModelFrontImage: '',
-          colorOnModelSideImage:  '',
-          colorOnModelBackImage:  '',
+          colorOnModelSideImage: '',
+          colorOnModelBackImage: '',
           sizes: [],
         };
       }
       skuMap[colorName].sizes.push({ partId, size });
     }
 
-    // Build SKUs array
     const skus = [];
     Object.values(skuMap).forEach(color => {
       color.sizes.forEach(s => {
         skus.push({
-          sku:              s.partId,
-          styleID:          styleUpper,
-          colorName:        color.colorName,
-          redisColorName:   color.redisColorName || color.colorName,
-          color1:           color.color1,
-          sizeName:         s.size,
+          sku: s.partId,
+          styleID: styleUpper,
+          colorName: color.colorName,
+          inventoryColorName: color.inventoryColorName,
+          color1: color.color1,
+          sizeName: s.size,
           quantityAvailable: 999,
-          colorFrontImage:  color.colorFrontImage,
-          colorBackImage:   color.colorBackImage,
-          colorSideImage:   color.colorSideImage,
+          colorFrontImage: color.colorFrontImage,
+          colorBackImage: color.colorBackImage,
+          colorSideImage: color.colorSideImage,
           colorSwatchImage: color.colorSwatchImage,
           colorOnModelFrontImage: '',
-          colorOnModelSideImage:  '',
-          colorOnModelBackImage:  '',
+          colorOnModelSideImage: '',
+          colorOnModelBackImage: '',
           _source: 'sanmar',
         });
       });
     });
 
-    // Get first color's front image for card
-    const firstColorWithImage = Object.values(skuMap).find(c => c.colorFrontImage);
-    const styleImage = firstColorWithImage ? firstColorWithImage.colorFrontImage : '';
-    // styleImage already proxied via colorFrontImage
+    const firstWithImg = Object.values(skuMap).find(c => c.colorFrontImage);
+    const styleImage = firstWithImg ? firstWithImg.colorFrontImage : '';
 
     const product = {
-      styleID:      styleUpper,
-      styleName:    styleUpper,
-      title:        productName,
-      brandName:    brand,
+      styleID: styleUpper,
+      styleName: styleUpper,
+      title: productName,
+      brandName: brand,
       baseCategory: category,
-      description:  descriptions.join(' | '),
+      description: descriptions.join(' | '),
       styleImage,
-      _source:      'sanmar',
+      _source: 'sanmar',
     };
 
-    // Cache product+skus in Redis for 24 hours
+    // Cache for 24h
     if (REDIS_URL && REDIS_TOKEN) {
       try {
         await fetch(`${REDIS_URL}/setex/${encodeURIComponent(cacheKey)}/86400`, {
@@ -239,7 +212,7 @@ export default async function handler(req, res) {
           headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
           body: JSON.stringify(JSON.stringify({ product, skus })),
         });
-      } catch(e) { /* cache write failed — not critical */ }
+      } catch(e) {}
     }
 
     if (mode === 'skus') return res.status(200).json(skus);
