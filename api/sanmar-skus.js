@@ -19,7 +19,7 @@ export default async function handler(req, res) {
 
   const styleUpper = styleID.trim().toUpperCase();
 
-  // Fetch image map from Redis
+  // Load image + color map from Redis
   let imageMap = {};
   if (REDIS_URL && REDIS_TOKEN) {
     try {
@@ -35,45 +35,40 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // ── IMPROVED FUZZY MATCHER ──
+  // ── IMPROVED FUZZY MATCHER WITH COLOR SUPPORT ──
   const lookupFuzzy = (colorName, map) => {
-    if (!colorName || !map) return null;
+    if (!colorName || !map) return { color1: '#888888' };
 
     const normalize = (str) => str.toLowerCase()
       .replace(/&amp;/gi, 'and')
       .replace(/&/g, 'and')
-      .replace(/\./g, '')           // Ath. → Ath
+      .replace(/\./g, '')
       .replace(/safety/gi, 's')
       .replace(/dark heather/gi, 'd heather')
       .replace(/athletic/gi, 'ath')
-      .replace(/heather grey/gi, 'heather gray')
+      .replace(/true /gi, '')
+      .replace(/celadon/gi, 'celadon')
       .trim();
 
     const queryNorm = normalize(colorName);
     const queryWords = queryNorm.split(/\s+/).filter(Boolean);
 
-    for (const [key, imgs] of Object.entries(map)) {
+    for (const [key, data] of Object.entries(map)) {
       const keyNorm = normalize(key);
-      const keyWords = keyNorm.split(/\s+/).filter(Boolean);
 
-      if (keyNorm === queryNorm) return imgs;
-
-      if (queryWords.every(qw => 
-        keyWords.some(kw => kw.includes(qw) || qw.includes(kw))
-      )) {
-        return imgs;
-      }
-
-      if ((queryNorm.includes('ath') && keyNorm.includes('athletic')) ||
-          (queryNorm.includes('s ') && keyNorm.includes('safety')) ||
-          (queryNorm.includes('d heather') && keyNorm.includes('dark heather'))) {
-        return imgs;
+      if (keyNorm === queryNorm || 
+          queryWords.every(qw => keyNorm.includes(qw)) ||
+          keyNorm.includes(queryNorm)) {
+        return {
+          ...data,
+          color1: data.color1 || '#888888'
+        };
       }
     }
-    return null;
+    return { color1: '#888888' };
   };
 
-  // ── FETCH PRODUCT FROM SANMAR ──
+  // ── FETCH FROM SANMAR ──
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
@@ -140,33 +135,28 @@ export default async function handler(req, res) {
         .replace(/\//g, '_')
         .trim();
 
-      const imgs = imageMap[colorSlug] || imageMap[colorName] || lookupFuzzy(colorName, imageMap) || {};
+      const imgData = imageMap[colorSlug] || imageMap[colorName] || lookupFuzzy(colorName, imageMap);
 
-      const proxy = (u) => {
-        if (!u) return '';
-        if (!u.startsWith('http')) u = `https://cdnm.sanmar.com/imglib/swatches/${u}`;
-        return `/api/sanmar-image?url=${encodeURIComponent(u)}`;
-      };
+      const proxy = (u) => u 
+        ? `/api/sanmar-image?url=${encodeURIComponent(u.startsWith('http') ? u : `https://cdnm.sanmar.com/imglib/swatches/${u}`)}` 
+        : '';
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
-          inventoryColorName: imgs.colorName || colorName,
-          color1: '#888888',
-          colorFrontImage: proxy(imgs.side || imgs.front),
-          colorBackImage: proxy(imgs.back),
-          colorSideImage: proxy(imgs.front),
-          colorSwatchImage: proxy(imgs.swatch),
-          colorOnModelFrontImage: '',
-          colorOnModelSideImage: '',
-          colorOnModelBackImage: '',
+          inventoryColorName: imgData.inventoryColorName || colorName,
+          color1: imgData.color1 || '#888888',           // ← Critical fix for grey swatches
+          colorFrontImage: proxy(imgData.side || imgData.front),
+          colorBackImage: proxy(imgData.back),
+          colorSideImage: proxy(imgData.front),
+          colorSwatchImage: proxy(imgData.swatch),
           sizes: [],
         };
       }
       skuMap[colorName].sizes.push({ partId, size });
     }
 
-    // Build final SKUs array
+    // Build SKUs
     const skus = [];
     Object.values(skuMap).forEach(color => {
       color.sizes.forEach(s => {
@@ -177,7 +167,7 @@ export default async function handler(req, res) {
           inventoryColorName: color.inventoryColorName,
           color1: color.color1,
           sizeName: s.size,
-          quantityAvailable: 999,           // Will be overridden later if inventory is fetched
+          quantityAvailable: 999,
           colorFrontImage: color.colorFrontImage,
           colorBackImage: color.colorBackImage,
           colorSideImage: color.colorSideImage,
