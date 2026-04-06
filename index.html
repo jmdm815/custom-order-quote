@@ -1617,7 +1617,7 @@ function buildSizeTable(skus) {
     const sku   = s.sku || s.SKU || '';
 
     const stockClass = qty === 0 ? 'out' : qty < 12 ? 'low' : 'in';
-    const stockLabel = qty === 0 ? 'Out of stock' : qty < 12 ? `Low (${qty})` : `In stock`;
+    const stockLabel = qty === 0 ? 'Out of stock' : qty < 12 ? `Low (${qty})` : qty >= 999 ? 'In stock' : `In stock (${qty})`;
     const row = document.createElement('tr');
     row.innerHTML = `
       <td class="size-name">${size}</td>
