@@ -18,9 +18,9 @@ export default async function handler(req, res) {
   const styleUpper = style.trim().toUpperCase();
   const cacheKey = `sanmar:product:${styleUpper}`;
 
-  console.log(`[SanMar] Request for style: ${styleUpper}`);
+  console.log(`[SanMar] Request started for style: ${styleUpper}`);
 
-  // Check cache
+  // Check product cache
   if (REDIS_URL && REDIS_TOKEN) {
     try {
       const cacheRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(cacheKey)}`, {
@@ -36,9 +36,12 @@ export default async function handler(req, res) {
           return res.status(200).json([cached.product]);
         }
       }
-    } catch(e) {}
+    } catch(e) {
+      console.log(`[SanMar] Cache check error: ${e.message}`);
+    }
   }
 
+  // Load image map
   let imageMap = {};
   if (REDIS_URL && REDIS_TOKEN) {
     try {
@@ -50,14 +53,18 @@ export default async function handler(req, res) {
         let val = imgData.result;
         while (typeof val === 'string') { try { val = JSON.parse(val); } catch(e) { break; } }
         imageMap = val || {};
-        console.log(`[SanMar] Loaded ${Object.keys(imageMap).length} images from Redis for ${styleUpper}`);
+        console.log(`[SanMar] Loaded ${Object.keys(imageMap).length} color images from Redis`);
+      } else {
+        console.log(`[SanMar] No image map found in Redis for ${styleUpper}`);
       }
-    } catch(e) {}
+    } catch(e) {
+      console.log(`[SanMar] Failed to load image map: ${e.message}`);
+    }
   }
 
-  // Strong fuzzy matcher with debug
+  // Strong fuzzy matcher with detailed debug
   const lookupFuzzy = (colorName, map) => {
-    if (!colorName || !map) return { color1: '#888888' };
+    if (!colorName || Object.keys(map).length === 0) return { color1: '#888888' };
 
     const original = colorName;
     let clean = colorName.toLowerCase()
@@ -69,7 +76,7 @@ export default async function handler(req, res) {
       .replace(/hthr/g, 'heather')
       .trim();
 
-    console.log(`[SanMar Debug] Color "${original}" → cleaned "${clean}"`);
+    console.log(`[SanMar Debug] Color: "${original}" → cleaned: "${clean}"`);
 
     const queryWords = clean.split(/\s+/).filter(Boolean);
 
@@ -80,18 +87,23 @@ export default async function handler(req, res) {
         .replace(/\./g, '')
         .trim();
 
+      // Specific fixes
       keyClean = keyClean
         .replace(/coyotebrn/g, 'coyote brown')
         .replace(/woodlandbrn/g, 'woodland brown')
-        .replace(/athletichthr/g, 'athletic heather');
+        .replace(/athletichthr/g, 'athletic heather')
+        .replace(/ath hthr/g, 'athletic heather');
 
-      if (keyClean === clean || keyClean.includes(clean) || clean.includes(keyClean) ||
+      if (keyClean === clean || 
+          keyClean.includes(clean) || 
+          clean.includes(keyClean) ||
           queryWords.every(qw => keyClean.includes(qw))) {
-        console.log(`[SanMar Debug] MATCH for "${original}" → "${key}"`);
+        
+        console.log(`[SanMar Debug] MATCH FOUND: "${original}" → Redis key "${key}"`);
         return { ...data, color1: data.color1 || '#888888' };
       }
     }
-    console.log(`[SanMar Debug] No match for "${original}"`);
+    console.log(`[SanMar Debug] NO MATCH for "${original}"`);
     return { color1: '#888888' };
   };
 
@@ -121,23 +133,41 @@ export default async function handler(req, res) {
     });
     const xml = await r.text();
 
-    console.log(`[SanMar] XML length for ${styleUpper}: ${xml.length} characters`);
+    console.log(`[SanMar] Received XML length: ${xml.length} characters for ${styleUpper}`);
 
     if (xml.includes('faultstring')) {
-      console.log(`[SanMar] Faultstring found for ${styleUpper}`);
+      console.log(`[SanMar] Faultstring detected for ${styleUpper}`);
       return res.status(404).json({ error: `Style ${style} not found.` });
     }
 
-    // ... (getFirst, getVal, productName, descriptions parsing - same as before)
+    const getFirst = (tag) => {
+      for (const t of [tag, `ns2:${tag}`]) {
+        const i = xml.indexOf(`<${t}>`);
+        if (i === -1) continue;
+        const start = i + t.length + 2;
+        const end = xml.indexOf(`</${t}>`, start);
+        if (end === -1) continue;
+        return xml.substring(start, end).trim();
+      }
+      return '';
+    };
 
-    const getFirst = (tag) => { /* keep the same getFirst function */ };
-    const getVal = (block, tag) => { /* keep the same getVal function */ };
+    const getVal = (block, tag) => {
+      for (const t of [tag, `ns2:${tag}`]) {
+        const i = block.indexOf(`<${t}>`);
+        if (i === -1) continue;
+        const start = i + t.length + 2;
+        const end = block.indexOf(`</${t}>`, start);
+        if (end === -1) continue;
+        return block.substring(start, end).trim();
+      }
+      return '';
+    };
 
     const productName = getFirst('productName') || styleUpper;
     const brand = getFirst('productBrand') || 'SanMar';
     const category = getFirst('category') || '';
 
-    // Parse descriptions (same)
     const descriptions = [];
     let dpos = 0;
     while (true) {
@@ -152,8 +182,8 @@ export default async function handler(req, res) {
     }
 
     // Parse ProductParts
-    let partCount = 0;
     const skuMap = {};
+    let partCount = 0;
     let searchFrom = 0;
     while (true) {
       const start = xml.indexOf('<ProductPart>', searchFrom);
@@ -166,18 +196,83 @@ export default async function handler(req, res) {
       const partId = getVal(part, 'partId');
       const colorName = getVal(part, 'colorName');
       const size = getVal(part, 'labelSize');
+      if (!colorName || !size) continue;
 
-      if (colorName && size) {
-        partCount++;
-        // ... (rest of color processing same as before)
+      partCount++;
+
+      const colorSlug = colorName
+        .replace(/&amp;/gi,'and').replace(/&/g,'and')
+        .replace(/\./g,'').replace(/\s+/g,'_').replace(/\//g,'_').trim();
+
+      const imgData = imageMap[colorSlug] || imageMap[colorName] || lookupFuzzy(colorName, imageMap);
+
+      const proxy = (u) => u 
+        ? `/api/sanmar-image?url=${encodeURIComponent(u.startsWith('http') ? u : `https://cdnm.sanmar.com/imglib/swatches/${u}`)}` 
+        : '';
+
+      if (!skuMap[colorName]) {
+        skuMap[colorName] = {
+          colorName,
+          inventoryColorName: imgData.inventoryColorName || colorName,
+          color1: imgData.color1 || '#888888',
+          colorFrontImage: proxy(imgData.side || imgData.front),
+          colorBackImage: proxy(imgData.back),
+          colorSideImage: proxy(imgData.front),
+          colorSwatchImage: proxy(imgData.swatch),
+          sizes: [],
+        };
       }
+      skuMap[colorName].sizes.push({ partId, size });
     }
 
-    console.log(`[SanMar] Found ${partCount} ProductPart entries for ${styleUpper}`);
+    console.log(`[SanMar] Parsed ${partCount} SKUs for ${styleUpper}`);
 
-    // ... rest of the code for building skus, product, caching, etc. (same as previous full version)
+    const skus = Object.values(skuMap).flatMap(color => 
+      color.sizes.map(s => ({
+        sku: s.partId,
+        styleID: styleUpper,
+        colorName: color.colorName,
+        inventoryColorName: color.inventoryColorName,
+        color1: color.color1,
+        sizeName: s.size,
+        quantityAvailable: 999,
+        colorFrontImage: color.colorFrontImage,
+        colorBackImage: color.colorBackImage,
+        colorSideImage: color.colorSideImage,
+        colorSwatchImage: color.colorSwatchImage,
+        _source: 'sanmar',
+      }))
+    );
 
-    // (I kept the rest identical to avoid errors — let me know if you need the complete 400+ line file again)
+    const firstWithImg = Object.values(skuMap).find(c => c.colorFrontImage);
+    const styleImage = firstWithImg?.colorFrontImage || 
+                      `https://images.ssactivewear.com/im/1-0-0/500/${styleUpper}_FRONT.jpg`;
+
+    const product = {
+      styleID: styleUpper,
+      styleName: styleUpper,
+      title: productName,
+      brandName: brand,
+      baseCategory: category,
+      description: descriptions.join(' | '),
+      styleImage,
+      _source: 'sanmar',
+    };
+
+    // Cache result
+    if (REDIS_URL && REDIS_TOKEN && skus.length > 0) {
+      try {
+        await fetch(`${REDIS_URL}/setex/${encodeURIComponent(cacheKey)}/86400`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(JSON.stringify({ product, skus })),
+        });
+        console.log(`[SanMar] Cached result for ${styleUpper}`);
+      } catch(e) {}
+    }
+
+    if (mode === 'skus') return res.status(200).json(skus);
+    return res.status(200).json([product]);
 
   } catch (err) {
     console.error('SanMar product error:', err);
