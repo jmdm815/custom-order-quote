@@ -1494,28 +1494,45 @@ async function loadProductDetail(p) {
 }
 
 async function fetchSanmarInventory(styleID, colorName, skus) {
+  // Fetch inventory per size in parallel
+  const uniqueSizes = [...new Set(skus.map(s => s.sizeName).filter(Boolean))];
   try {
-    const res = await fetch(`/api/sanmar-inventory?style=${encodeURIComponent(styleID)}&color=${encodeURIComponent(colorName)}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (data.qty === null || data.qty === undefined) return; // invalid color for inventory API
-    const totalQty = data.qty;
-    // Update ALL stock badges currently visible in the size table
-    const allBadges = document.querySelectorAll('#size-tbody .stock-badge');
-    const allInputs = document.querySelectorAll('#size-tbody .qty-input');
-    allBadges.forEach(badge => {
-      if (totalQty === 0) {
+    const results = await Promise.all(uniqueSizes.map(size =>
+      fetch(`/api/sanmar-inventory?style=${encodeURIComponent(styleID)}&color=${encodeURIComponent(colorName)}&size=${encodeURIComponent(size)}`)
+        .then(r => r.json())
+        .then(d => ({ size, qty: d.qty }))
+        .catch(() => ({ size, qty: null }))
+    ));
+    
+    // Build size->qty map
+    const qtyMap = {};
+    results.forEach(r => { if (r.qty !== null) qtyMap[r.size] = r.qty; });
+
+    // Update each size row
+    const rows = document.querySelectorAll('#size-tbody tr');
+    rows.forEach(row => {
+      const sizeCell = row.querySelector('.size-name');
+      if (!sizeCell) return;
+      const size = sizeCell.textContent.trim();
+      const qty = qtyMap[size];
+      if (qty === undefined) return;
+      const badge = row.querySelector('.stock-badge');
+      const input = row.querySelector('.qty-input');
+      if (!badge) return;
+      if (qty === 0) {
         badge.textContent = 'Out of stock';
         badge.className = 'stock-badge out';
-      } else if (totalQty < 12) {
-        badge.textContent = `Low (${totalQty})`;
+        if (input) { input.disabled = true; input.value = 0; }
+      } else if (qty < 12) {
+        badge.textContent = `Low (${qty})`;
         badge.className = 'stock-badge low';
+        if (input) { input.max = qty; input.disabled = false; }
       } else {
-        badge.textContent = `In stock (${totalQty.toLocaleString()})`;
+        badge.textContent = `In stock (${qty.toLocaleString()})`;
         badge.className = 'stock-badge in';
+        if (input) { input.max = qty; input.disabled = false; }
       }
     });
-    allInputs.forEach(input => { if (totalQty > 0) input.max = totalQty; });
   } catch(e) { /* inventory unavailable */ }
 }
 
