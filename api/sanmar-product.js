@@ -52,10 +52,11 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // ── STRONG FUZZY MATCHER FOR SANMAR ABBREVIATIONS ──
+  // ── DEBUG ENABLED FUZZY MATCHER ──
   const lookupFuzzy = (colorName, map) => {
     if (!colorName || !map) return { color1: '#888888' };
 
+    const original = colorName;
     let clean = colorName.toLowerCase()
       .replace(/&amp;/g, 'and')
       .replace(/&/g, 'and')
@@ -64,6 +65,8 @@ export default async function handler(req, res) {
       .replace(/brn/g, 'brown')
       .replace(/hthr/g, 'heather')
       .trim();
+
+    console.log(`[SanMar Debug] Color: "${original}" → cleaned: "${clean}"`);
 
     const queryWords = clean.split(/\s+/).filter(Boolean);
 
@@ -74,23 +77,24 @@ export default async function handler(req, res) {
         .replace(/\./g, '')
         .trim();
 
-      // Specific fixes for stubborn SanMar abbreviations
+      // Specific abbreviation fixes
       keyClean = keyClean
         .replace(/coyotebrn/g, 'coyote brown')
         .replace(/woodlandbrn/g, 'woodland brown')
         .replace(/athletichthr/g, 'athletic heather')
         .replace(/ath hthr/g, 'athletic heather');
 
-      const keyWords = keyClean.split(/\s+/).filter(Boolean);
-
-      // Best match logic
       if (keyClean === clean || 
           keyClean.includes(clean) || 
           clean.includes(keyClean) ||
           (queryWords.length > 0 && queryWords.every(qw => keyClean.includes(qw)))) {
+        
+        console.log(`[SanMar Debug] MATCH FOUND for "${original}" → Redis key: "${key}"`);
         return { ...data, color1: data.color1 || '#888888' };
       }
     }
+
+    console.log(`[SanMar Debug] No match found for "${original}"`);
     return { color1: '#888888' };
   };
 
