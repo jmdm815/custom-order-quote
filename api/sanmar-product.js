@@ -18,7 +18,6 @@ export default async function handler(req, res) {
   const styleUpper = style.trim().toUpperCase();
   const cacheKey = `sanmar:product:${styleUpper}`;
 
-  // Check cache
   if (REDIS_URL && REDIS_TOKEN) {
     try {
       const cacheRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(cacheKey)}`, {
@@ -36,7 +35,6 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // Load image map
   let imageMap = {};
   if (REDIS_URL && REDIS_TOKEN) {
     try {
@@ -52,7 +50,7 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // ── EVEN STRONGER FUZZY MATCHER ──
+  // ── PRECISE FUZZY MATCHER (Fixed for CoyoteBrn, WoodlandBrn, etc.) ──
   const lookupFuzzy = (colorName, map) => {
     if (!colorName || !map) return { color1: '#888888' };
 
@@ -63,7 +61,6 @@ export default async function handler(req, res) {
       .replace(/true /g, '')
       .replace(/brn/g, 'brown')
       .replace(/hthr/g, 'heather')
-      .replace(/athletic hthr/g, 'athletic heather')
       .trim();
 
     const queryWords = clean.split(/\s+/).filter(Boolean);
@@ -75,27 +72,26 @@ export default async function handler(req, res) {
         .replace(/\./g, '')
         .trim();
 
-      // Direct replacements for common abbreviations
-      keyClean = keyClean
-        .replace(/woodlandbrn/g, 'woodland brown')
-        .replace(/athletichthr/g, 'athletic heather');
+      // Specific fixes for common abbreviations
+      if (clean.includes('coyote')) keyClean = keyClean.replace(/coyotebrown/g, 'coyote brown');
+      if (clean.includes('woodland')) keyClean = keyClean.replace(/woodlandbrn/g, 'woodland brown');
 
       const keyWords = keyClean.split(/\s+/).filter(Boolean);
 
-      if (keyClean === clean) return { ...data, color1: data.color1 || '#888888' };
-
-      if (queryWords.every(qw => keyClean.includes(qw))) {
+      // Prioritize exact or near-exact matches
+      if (keyClean === clean || keyClean.includes(clean) || clean.includes(keyClean)) {
         return { ...data, color1: data.color1 || '#888888' };
       }
 
-      if (keyWords.every(kw => clean.includes(kw))) {
+      // All words from query must appear in key
+      if (queryWords.length > 0 && queryWords.every(qw => keyClean.includes(qw))) {
         return { ...data, color1: data.color1 || '#888888' };
       }
     }
     return { color1: '#888888' };
   };
 
-  // SOAP + parsing code (same as before)
+  // SOAP Request and parsing (unchanged)
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
