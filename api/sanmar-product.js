@@ -12,6 +12,7 @@ export default async function handler(req, res) {
   const pass = process.env.SANMAR_PASSWORD;
   const REDIS_URL   = process.env.UPSTASH_REDIS_REST_URL;
   const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
   if (!user || !pass) return res.status(500).json({ error: 'SanMar credentials not configured.' });
 
   const styleUpper = style.trim().toUpperCase();
@@ -51,23 +52,48 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
-  // Fuzzy imageMap lookup: handles abbreviated PromoStandards names vs full Redis names
-  // e.g. "Ath. Maroon" -> "Athletic Maroon", "S. Green" -> "Safety Green"
+  // ── IMPROVED FUZZY MATCHER ──
   const lookupFuzzy = (colorName, map) => {
-    const normWords = s => s.toLowerCase().replace(/\./g,'').replace(/&amp;/gi,'and').replace(/&/g,'and').split(/\s+/).filter(w => w.length > 0);
-    const queryWords = normWords(colorName);
-    if (!queryWords.length) return null;
-    for (const key of Object.keys(map)) {
-      const keyWords = normWords(key);
-      if (keyWords.length !== queryWords.length) continue;
-      // Every query word must be a prefix of the corresponding key word (or exact match)
-      const match = queryWords.every((w, i) => keyWords[i].startsWith(w));
-      if (match) return map[key];
+    if (!colorName || !map) return null;
+
+    const normalize = (str) => str.toLowerCase()
+      .replace(/&amp;/gi, 'and')
+      .replace(/&/g, 'and')
+      .replace(/\./g, '')           // Ath. → Ath
+      .replace(/safety/gi, 's')
+      .replace(/dark heather/gi, 'd heather')
+      .replace(/athletic/gi, 'ath')
+      .replace(/heather grey/gi, 'heather gray')
+      .trim();
+
+    const queryNorm = normalize(colorName);
+    const queryWords = queryNorm.split(/\s+/).filter(Boolean);
+
+    for (const [key, imgs] of Object.entries(map)) {
+      const keyNorm = normalize(key);
+      const keyWords = keyNorm.split(/\s+/).filter(Boolean);
+
+      // Exact match
+      if (keyNorm === queryNorm) return imgs;
+
+      // Strong partial match
+      if (queryWords.every(qw => 
+        keyWords.some(kw => kw.includes(qw) || qw.includes(kw))
+      )) {
+        return imgs;
+      }
+
+      // Common abbreviation handling
+      if ((queryNorm.includes('ath') && keyNorm.includes('athletic')) ||
+          (queryNorm.includes('s ') && keyNorm.includes('safety')) ||
+          (queryNorm.includes('d heather') && keyNorm.includes('dark heather'))) {
+        return imgs;
+      }
     }
     return null;
   };
 
-  // Fetch from SanMar PromoStandards
+  // ── FETCH FROM SANMAR ──
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:ns="http://www.promostandards.org/WSDL/ProductDataService/1.0.0/"
@@ -154,10 +180,16 @@ export default async function handler(req, res) {
       const size = getVal(part, 'labelSize');
       if (!colorName || !size) continue;
 
-      const colorSlug = colorName.replace(/&amp;/gi,'and').replace(/&/g,'and').replace(/\s+/g,'_').replace(/\//g,'_');
+      // Improved slug
+      const colorSlug = colorName
+        .replace(/&amp;/gi, 'and')
+        .replace(/&/g, 'and')
+        .replace(/\./g, '')
+        .replace(/\s+/g, '_')
+        .replace(/\//g, '_')
+        .trim();
 
-      // Look up images - try slug, exact name, then fuzzy word-prefix match
-      // (PromoStandards uses abbreviated names like "Ath. Maroon"; Redis has full names like "Athletic Maroon")
+      // Try exact slug → exact name → fuzzy lookup
       const imgs = imageMap[colorSlug] || imageMap[colorName] || lookupFuzzy(colorName, imageMap) || {};
 
       const proxy = (u) => {
@@ -207,8 +239,15 @@ export default async function handler(req, res) {
       });
     });
 
+    // ── Better Image Fallback ──
+    let styleImage = '';
     const firstWithImg = Object.values(skuMap).find(c => c.colorFrontImage);
-    const styleImage = firstWithImg ? firstWithImg.colorFrontImage : '';
+    if (firstWithImg && firstWithImg.colorFrontImage) {
+      styleImage = firstWithImg.colorFrontImage;
+    } else {
+      // Fallback to S&S default image (very reliable for common styles like PC61)
+      styleImage = `https://images.ssactivewear.com/im/1-0-0/500/${styleUpper}_FRONT.jpg`;
+    }
 
     const product = {
       styleID: styleUpper,
@@ -236,6 +275,7 @@ export default async function handler(req, res) {
     return res.status(200).json([product]);
 
   } catch (err) {
+    console.error('SanMar product error:', err);
     return res.status(500).json({ error: 'Failed to reach SanMar API', detail: err.message });
   }
 }
