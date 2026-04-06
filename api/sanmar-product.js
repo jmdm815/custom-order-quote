@@ -146,9 +146,9 @@ export default async function handler(req, res) {
         skuMap[colorName] = {
           colorName,
           color1: '#888888',
-          colorFrontImage:        proxy(imgs.front),
+          colorFrontImage:        proxy(imgs.side  || imgs.front), // model front = best hero image
           colorBackImage:         proxy(imgs.back),
-          colorSideImage:         proxy(imgs.side),
+          colorSideImage:         proxy(imgs.front), // flat front as "side" view
           colorSwatchImage:       proxy(imgs.swatch),
           colorOnModelFrontImage: '',
           colorOnModelSideImage:  '',
