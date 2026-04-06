@@ -30,8 +30,10 @@ export default async function handler(req, res) {
       });
       const redisData = await redisRes.json();
       if (redisData.result) {
-        const raw = redisData.result;
-        imageMap = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        // Value may be double-stringified — parse until we get an object
+        let val = redisData.result;
+        while (typeof val === 'string') { try { val = JSON.parse(val); } catch(e) { break; } }
+        imageMap = val || {};
       }
     } catch(e) {
       // Redis unavailable — proceed without images
@@ -133,7 +135,12 @@ export default async function handler(req, res) {
 
       // Look up images from Redis map
       const imgs = imageMap[colorSlug] || imageMap[colorName] || {};
-      const proxy = (u) => u ? `/api/sanmar-image?url=${encodeURIComponent(u)}` : '';
+      const proxy = (u) => {
+        if (!u) return '';
+        // Handle relative swatch filenames
+        if (!u.startsWith('http')) u = `https://cdnm.sanmar.com/imglib/swatches/${u}`;
+        return `/api/sanmar-image?url=${encodeURIComponent(u)}`;
+      };
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
