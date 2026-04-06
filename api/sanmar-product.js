@@ -51,6 +51,22 @@ export default async function handler(req, res) {
     } catch(e) {}
   }
 
+  // Fuzzy imageMap lookup: handles abbreviated PromoStandards names vs full Redis names
+  // e.g. "Ath. Maroon" → "Athletic Maroon", "S. Green" → "Safety Green"
+  const lookupFuzzy = (colorName, map) => {
+    const normWords = s => s.toLowerCase().replace(/\./g,'').replace(/&amp;/gi,'and').replace(/&/g,'and').split(/\s+/).filter(w => w.length > 0);
+    const queryWords = normWords(colorName);
+    if (!queryWords.length) return null;
+    for (const key of Object.keys(map)) {
+      const keyWords = normWords(key);
+      if (keyWords.length !== queryWords.length) continue;
+      // Every query word must be a prefix of the corresponding key word (or exact match)
+      const match = queryWords.every((w, i) => keyWords[i].startsWith(w));
+      if (match) return map[key];
+    }
+    return null;
+  };
+
   // Fetch from SanMar PromoStandards
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
@@ -140,8 +156,9 @@ export default async function handler(req, res) {
 
       const colorSlug = colorName.replace(/&amp;/gi,'and').replace(/&/g,'and').replace(/\s+/g,'_').replace(/\//g,'_');
 
-      // Look up images — try slug then colorName directly
-      const imgs = imageMap[colorSlug] || imageMap[colorName] || {};
+      // Look up images — try slug, exact name, then fuzzy word-prefix match
+      // (PromoStandards uses abbreviated names like "Ath. Maroon"; Redis has full names like "Athletic Maroon")
+      const imgs = imageMap[colorSlug] || imageMap[colorName] || lookupFuzzy(colorName, imageMap) || {};
 
       const proxy = (u) => {
         if (!u) return '';
