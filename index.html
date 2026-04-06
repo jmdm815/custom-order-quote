@@ -1486,6 +1486,32 @@ async function loadProductDetail(p) {
   }
 }
 
+async function fetchSanmarInventory(styleID, colorName, skus) {
+  try {
+    const res = await fetch(`/api/sanmar-inventory?style=${encodeURIComponent(styleID)}&color=${encodeURIComponent(colorName)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    const totalQty = data.qty || 999;
+    // Update all size rows with the inventory qty
+    skus.forEach(s => {
+      const row = document.querySelector(`tr[data-sku="${s.sku}"]`);
+      if (!row) return;
+      const stockCell = row.querySelector('.stock-badge');
+      if (!stockCell) return;
+      if (totalQty === 0) {
+        stockCell.textContent = 'Out of stock';
+        stockCell.className = 'stock-badge out';
+      } else if (totalQty < 12) {
+        stockCell.textContent = `Low (${totalQty})`;
+        stockCell.className = 'stock-badge low';
+      } else {
+        stockCell.textContent = `In stock (${totalQty.toLocaleString()})`;
+        stockCell.className = 'stock-badge in';
+      }
+    });
+  } catch(e) { /* inventory unavailable */ }
+}
+
 function colorNameToHex(name) {
   if (!name) return '#888';
   const n = name.toLowerCase();
@@ -1545,6 +1571,10 @@ function buildColorGrid(skus) {
       document.getElementById('color-label-text').textContent = `Color: ${c.name}`;
       buildSizeTable(c.skus);
       updateProductImage(c);
+      // Fetch real inventory for SanMar products
+      if (c.skus && c.skus[0] && c.skus[0]._source === 'sanmar') {
+        fetchSanmarInventory(state.product.styleID, c.name, c.skus);
+      }
     };
     grid.appendChild(sw);
   });
@@ -1596,11 +1626,7 @@ function updateProductImage(color) {
       thumb.className = 'thumb' + (i === 0 ? ' active' : '');
       thumb.innerHTML = `<img src="${v.url}" alt="${v.label}" onerror="this.style.display='none'" onload="if(this.naturalWidth<100)this.style.display='none'">`;
       thumb.onclick = () => setMain(v.url, thumb);
-      const lbl = document.createElement('div');
-      lbl.className = 'thumb-label';
-      lbl.textContent = v.label;
       wrap2.appendChild(thumb);
-      wrap2.appendChild(lbl);
       strip.appendChild(wrap2);
     });
   }
