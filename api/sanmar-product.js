@@ -40,6 +40,25 @@ export default async function handler(req, res) {
     }
   }
 
+  // Check Redis cache for product data first
+  const cacheKey = `sanmar:product:${styleUpper}`;
+  if (REDIS_URL && REDIS_TOKEN) {
+    try {
+      const cacheRes = await fetch(`${REDIS_URL}/get/${encodeURIComponent(cacheKey)}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+      });
+      const cacheData = await cacheRes.json();
+      if (cacheData.result) {
+        let cached = cacheData.result;
+        while (typeof cached === 'string') { try { cached = JSON.parse(cached); } catch(e) { break; } }
+        if (cached && cached.skus && cached.product) {
+          if (mode === 'skus') return res.status(200).json(cached.skus);
+          return res.status(200).json([cached.product]);
+        }
+      }
+    } catch(e) { /* cache miss — proceed to fetch */ }
+  }
+
   // Step 2: Fetch product data from SanMar
   const soap = `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
@@ -197,6 +216,17 @@ export default async function handler(req, res) {
       styleImage,
       _source:      'sanmar',
     };
+
+    // Cache product+skus in Redis for 24 hours
+    if (REDIS_URL && REDIS_TOKEN) {
+      try {
+        await fetch(`${REDIS_URL}/setex/${encodeURIComponent(cacheKey)}/86400`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(JSON.stringify({ product, skus })),
+        });
+      } catch(e) { /* cache write failed — not critical */ }
+    }
 
     if (mode === 'skus') return res.status(200).json(skus);
     return res.status(200).json([product]);
