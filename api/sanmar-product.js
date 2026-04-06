@@ -30,7 +30,8 @@ export default async function handler(req, res) {
       });
       const redisData = await redisRes.json();
       if (redisData.result) {
-        imageMap = JSON.parse(redisData.result);
+        const raw = redisData.result;
+        imageMap = typeof raw === 'string' ? JSON.parse(raw) : raw;
       }
     } catch(e) {
       // Redis unavailable — proceed without images
@@ -132,15 +133,16 @@ export default async function handler(req, res) {
 
       // Look up images from Redis map
       const imgs = imageMap[colorSlug] || imageMap[colorName] || {};
+      const proxy = (u) => u ? `/api/sanmar-image?url=${encodeURIComponent(u)}` : '';
 
       if (!skuMap[colorName]) {
         skuMap[colorName] = {
           colorName,
           color1: '#888888',
-          colorFrontImage:        imgs.front  || '',
-          colorBackImage:         imgs.back   || '',
-          colorSideImage:         imgs.side   || '',
-          colorSwatchImage:       imgs.swatch || '',
+          colorFrontImage:        proxy(imgs.front),
+          colorBackImage:         proxy(imgs.back),
+          colorSideImage:         proxy(imgs.side),
+          colorSwatchImage:       proxy(imgs.swatch),
           colorOnModelFrontImage: '',
           colorOnModelSideImage:  '',
           colorOnModelBackImage:  '',
@@ -176,6 +178,7 @@ export default async function handler(req, res) {
     // Get first color's front image for card
     const firstColorWithImage = Object.values(skuMap).find(c => c.colorFrontImage);
     const styleImage = firstColorWithImage ? firstColorWithImage.colorFrontImage : '';
+    // styleImage already proxied via colorFrontImage
 
     const product = {
       styleID:      styleUpper,
