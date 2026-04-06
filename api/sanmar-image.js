@@ -1,11 +1,16 @@
 // api/sanmar-image.js
 // Proxies SanMar CDN images to bypass hotlink protection
 export default async function handler(req, res) {
-  const { url } = req.query;
+  let { url } = req.query;
   if (!url) return res.status(400).send('Missing url');
 
-  // Only allow cdnm.sanmar.com URLs for security
-  if (!url.startsWith('https://cdnm.sanmar.com/') && !url.startsWith('https://www.sanmar.com/')) {
+  // Handle swatch filenames — convert to full URL
+  if (!url.startsWith('http')) {
+    url = `https://cdnm.sanmar.com/imglib/swatches/${url}`;
+  }
+
+  // Only allow sanmar CDN domains
+  if (!url.includes('sanmar.com')) {
     return res.status(403).send('Forbidden');
   }
 
@@ -19,9 +24,14 @@ export default async function handler(req, res) {
 
     if (!r.ok) return res.status(r.status).send('Image not found');
 
-    const buffer = await r.arrayBuffer();
     const contentType = r.headers.get('content-type') || 'image/jpeg';
+    
+    // If it returns HTML, it's a placeholder — return 404
+    if (contentType.includes('text/html')) {
+      return res.status(404).send('Not an image');
+    }
 
+    const buffer = await r.arrayBuffer();
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
