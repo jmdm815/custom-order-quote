@@ -1604,9 +1604,8 @@ function buildColorGrid(skus) {
   Object.values(byColor).forEach(c => {
     const sw = document.createElement('div');
     sw.className = 'color-swatch';
-    // For SanMar products, swatch images are placeholders — use color-name-based color
-    const isSanmarSku = c.skus && c.skus[0] && c.skus[0]._source === 'sanmar';
-    if (c.swatch && !isSanmarSku) {
+    if (c.swatch) {
+      // Use swatch image when available (Redis-backed for SanMar, S&S CDN for S&S)
       sw.style.backgroundImage = `url(${c.swatch})`;
       sw.style.backgroundSize = 'cover';
     } else {
